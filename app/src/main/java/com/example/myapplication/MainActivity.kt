@@ -13,10 +13,8 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.example.myapplication.screens.TelaCadastro
-import com.example.myapplication.screens.TelaCarros
-import com.example.myapplication.screens.TelaCartoes
-import com.example.myapplication.screens.TelaLogin
+import com.example.myapplication.screens.*
+
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -47,8 +45,9 @@ fun App() {
         composable("login") { TelaLogin(navController) }
         composable("cadastro") { TelaCadastro(navController) }
         composable("home") { TelaPrincipal(navController) }
-        composable("cartoes") { TelaCartoes(navController) }
+        //composable("cartoes") { TelaCartoes(navController) }
         composable("carros") { TelaCarros(navController) }
+        composable("cadastro_cartao") { TelaCadastroCartao(navController) }
     }
 }
 
