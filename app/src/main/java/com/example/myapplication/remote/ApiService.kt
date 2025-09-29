@@ -20,12 +20,15 @@ interface ApiService {
 }
 
 interface CartaoApi {
-    @GET("cartoes/{userId}")
-    fun getCartoes(@Path("userId") userId: Int): Call<List<Cartao>>
+    // O backend obterá o usuário pelo token
+    @GET("cartoes")
+    fun getCartoes(): Call<List<Cartao>>
 
-    @POST("cartoes/{userID}")
+    // O backend obterá o userID do token, não precisa enviar na URL
+    @POST("cartoes")
     fun addCartao(@Body cartao: Cartao): Call<Cartao>
 
+    // O ID do cartão a ser deletado é passado na URL
     @DELETE("cartoes/{cartaoId}")
     fun deleteCartao(@Path("cartaoId") cartaoId: Int): Call<Void>
 }
