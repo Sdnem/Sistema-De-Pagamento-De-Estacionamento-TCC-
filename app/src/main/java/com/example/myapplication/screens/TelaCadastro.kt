@@ -70,7 +70,7 @@ fun TelaCadastro(navController: NavHostController) {
                 RetrofitInstance.api.cadastrar(usuario).enqueue(object : Callback<ResponseBody> {
                     override fun onResponse(call: Call<ResponseBody>, response: Response<ResponseBody>) {
                         if (response.isSuccessful) {
-                            navController.navigate("telaPrincipal")
+                            navController.navigate("home")
                         } else {
                             Log.e("API", "Erro na resposta: ${response.code()}")
                         }

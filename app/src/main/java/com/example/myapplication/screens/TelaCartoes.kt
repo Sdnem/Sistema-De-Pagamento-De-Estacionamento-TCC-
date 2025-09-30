@@ -1,96 +1,104 @@
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
-
-// Modelo do Cartão
-data class Cartao(
-    val nome: String,
-    val numero: String,
-    val banco: String
-)
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
+import androidx.navigation.compose.rememberNavController
+import com.example.myapplication.CartaoViewModel
+import com.example.myapplication.CartaoViewModelFactory
+import com.example.myapplication.model.SessionManager
+import com.example.myapplication.model.Cartao 
 
 @Composable
-fun CartoesScreen() {
-    // Lista inicial de cartões (pode ser carregada do banco depois)
-    var cartoes by remember {
-        mutableStateOf(
-            listOf(
-                Cartao("Pedro Henrique", "**** **** **** 1234", "Banco do Brasil"),
-                Cartao("Maria Silva", "**** **** **** 5678", "Itaú")
-            )
-        )
-    }
+fun TelaCartoes(
+    navController: NavController,
+    // A ViewModel é injetada aqui. O Context é necessário para o SessionManager.
+    viewModel: CartaoViewModel = viewModel(
+        factory = CartaoViewModelFactory(SessionManager(LocalContext.current))
+    )
+) {
+    // Coleta o estado da ViewModel. A UI irá recompor automaticamente quando esses valores mudarem.
+    val cartoes by viewModel.cartoes.collectAsState()
+    val isLoading by viewModel.isLoading
+    val errorMessage by viewModel.errorMessage
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        Text(
-            text = "Meus Cartões",
-            style = MaterialTheme.typography.headlineMedium
-        )
+        Text("Meus Cartões", style = MaterialTheme.typography.headlineMedium)
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        LazyColumn(
-            modifier = Modifier.weight(1f)
-        ) {
-            itemsIndexed(cartoes) { index, cartao ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    elevation = CardDefaults.cardElevation(4.dp)
-                ) {
-                    Column(
+        // Se houver uma mensagem de erro, exiba-a
+        errorMessage?.let {
+            Text(it, color = MaterialTheme.colorScheme.error)
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        if (isLoading) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        } else {
+            LazyColumn(modifier = Modifier.weight(1f)) {
+                items(cartoes, key = { it.id!! }) { cartao -> // Use o id como chave para melhor performance
+                    Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp)
+                            .padding(vertical = 4.dp),
+                        elevation = CardDefaults.cardElevation(4.dp)
                     ) {
-                        Text(text = "Nome: ${cartao.nome}", style = MaterialTheme.typography.bodyLarge)
-                        Text(text = "Número: ${cartao.numero}", style = MaterialTheme.typography.bodyMedium)
-                        Text(text = "Banco: ${cartao.banco}", style = MaterialTheme.typography.bodyMedium)
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text("Nome: ${cartao.nome}")
+                            Text("Número: **** **** **** ${cartao.numero % 10000}")
+                            Text("Banco: ${cartao.banco}")
 
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Button(
-                            onClick = {
-                                // Remove cartão
-                                cartoes = cartoes.toMutableList().apply { removeAt(index) }
-                            },
-                            modifier = Modifier.align(Alignment.End)
-                        ) {
-                            Text("Remover")
+                            Button(
+                                onClick = {
+                                    // A lógica de remoção agora está na ViewModel.
+                                    // O ID do cartão pode ser nulo ao criar, mas nunca será ao ser listado do BD. [cite: 5]
+                                    cartao.id?.let { viewModel.deletarCartao(it) }
+                                },
+                                modifier = Modifier.align(Alignment.End),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                            ) {
+                                Text("Remover")
+                            }
                         }
                     }
                 }
             }
-        }
 
-        Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-        Button(
-            onClick = {
-                // Exemplo de adicionar cartão (depois você pode trocar por formulário)
-                val novoCartao = Cartao("Novo Usuário", "**** **** **** ${(1000..9999).random()}", "Caixa")
-                cartoes = cartoes + novoCartao
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Adicionar Cartão")
+            Button(
+                onClick = {
+                    navController.navigate("addCartao")
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Adicionar Cartão")
+            }
         }
     }
 }
 
+// Preview pode ser simplificado, pois a lógica está na ViewModel.
 @Preview(showBackground = true)
 @Composable
-fun CartoesScreenPreview() {
-    CartoesScreen()
+fun TelaCartoesPreview() {
+    // Para o preview, podemos passar uma NavController de mentira.
+    // A ViewModel não será criada no modo preview.
+    // TelaCartoes(navController = rememberNavController())
+    // O ideal seria criar um preview estático sem a viewModel
+    Text("Preview da Tela de Cartões")
 }
