@@ -4,7 +4,7 @@
 
 Este projeto é um sistema completo para gerenciamento de cartões de crédito, composto por três partes principais:
 1.  **Backend:** Uma API RESTful desenvolvida em Python com o framework Flask, responsável pela lógica de negócio e comunicação com o banco de dados.
-2.  **Frontend:** Um aplicativo móvel desenvolvido em Kotlin para Android usando Jetpack Compose.
+2.  **Frontend:** Um aplicativo móvel desenvolvi[app](app)do em Kotlin para Android usando Jetpack Compose.
 3.  **Banco de Dados:** Um banco de dados MySQL para armazenar os dados dos usuários e cartões.
 
 Este guia detalha os passos necessários para configurar e executar todas as partes do sistema em um ambiente de desenvolvimento local.

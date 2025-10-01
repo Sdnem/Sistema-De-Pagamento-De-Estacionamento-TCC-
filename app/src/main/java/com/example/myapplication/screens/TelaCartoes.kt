@@ -1,3 +1,5 @@
+package com.example.myapplication.screens
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -10,21 +12,39 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import androidx.navigation.compose.rememberNavController
 import com.example.myapplication.CartaoViewModel
 import com.example.myapplication.CartaoViewModelFactory
 import com.example.myapplication.model.SessionManager
-import com.example.myapplication.model.Cartao 
 
 @Composable
 fun TelaCartoes(
-    navController: NavController,
-    // A ViewModel é injetada aqui. O Context é necessário para o SessionManager.
-    viewModel: CartaoViewModel = viewModel(
-        factory = CartaoViewModelFactory(SessionManager(LocalContext.current))
-    )
+    navController: NavController
 ) {
-    // Coleta o estado da ViewModel. A UI irá recompor automaticamente quando esses valores mudarem.
+    val context = LocalContext.current
+    val sessionManager = remember { SessionManager(context) }
+    val isLoggedIn = remember { sessionManager.fetchAuthToken() != null }
+
+    // CORREÇÃO: Adicionada verificação de login antes de carregar a tela
+    if (!isLoggedIn) {
+        // LaunchedEffect garante que a navegação ocorra de forma segura no ciclo de vida do Composable.
+        // A chave `true` garante que isso execute apenas uma vez.
+        LaunchedEffect(true) {
+            navController.navigate("login") {
+                // Limpa todo o histórico de navegação para que o usuário não possa voltar
+                // para uma tela interna pressionando o botão "Voltar".
+                popUpTo(0)
+            }
+        }
+        // Exibe um contêiner vazio enquanto redireciona para evitar que o resto do código execute
+        return
+    }
+
+    // O código abaixo só será executado se o usuário estiver logado.
+    // Isso evita o crash ao inicializar a ViewModel sem um token.
+    val viewModel: CartaoViewModel = viewModel(
+        factory = CartaoViewModelFactory(sessionManager)
+    )
+
     val cartoes by viewModel.cartoes.collectAsState()
     val isLoading by viewModel.isLoading
     val errorMessage by viewModel.errorMessage
@@ -38,7 +58,6 @@ fun TelaCartoes(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Se houver uma mensagem de erro, exiba-a
         errorMessage?.let {
             Text(it, color = MaterialTheme.colorScheme.error)
             Spacer(modifier = Modifier.height(8.dp))
@@ -50,7 +69,7 @@ fun TelaCartoes(
             }
         } else {
             LazyColumn(modifier = Modifier.weight(1f)) {
-                items(cartoes, key = { it.id!! }) { cartao -> // Use o id como chave para melhor performance
+                items(cartoes, key = { it.id!! }) { cartao ->
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -59,13 +78,12 @@ fun TelaCartoes(
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text("Nome: ${cartao.nome}")
-                            Text("Número: **** **** **** ${cartao.numero % 10000}")
+                            Text("Número: **** **** **** ${cartao.numero.toString().takeLast(4)}")
+                            Text("Validade: ${cartao.dataValidade}")
                             Text("Banco: ${cartao.banco}")
 
                             Button(
                                 onClick = {
-                                    // A lógica de remoção agora está na ViewModel.
-                                    // O ID do cartão pode ser nulo ao criar, mas nunca será ao ser listado do BD. [cite: 5]
                                     cartao.id?.let { viewModel.deletarCartao(it) }
                                 },
                                 modifier = Modifier.align(Alignment.End),
@@ -82,7 +100,7 @@ fun TelaCartoes(
 
             Button(
                 onClick = {
-                    navController.navigate("addCartao")
+                    navController.navigate("cadastro_cartao")
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -92,13 +110,10 @@ fun TelaCartoes(
     }
 }
 
-// Preview pode ser simplificado, pois a lógica está na ViewModel.
 @Preview(showBackground = true)
 @Composable
 fun TelaCartoesPreview() {
-    // Para o preview, podemos passar uma NavController de mentira.
-    // A ViewModel não será criada no modo preview.
-    // TelaCartoes(navController = rememberNavController())
-    // O ideal seria criar um preview estático sem a viewModel
-    Text("Preview da Tela de Cartões")
+    Column(modifier = Modifier.padding(16.dp)) {
+        Text("Preview da Tela de Cartões")
+    }
 }

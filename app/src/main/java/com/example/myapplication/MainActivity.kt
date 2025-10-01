@@ -1,4 +1,4 @@
-package com.example.compose_class
+package com.example.myapplication
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -9,24 +9,23 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+// Garanta que esta importação usa o pacote correto das suas telas
 import com.example.myapplication.screens.*
-
+import com.example.myapplication.ui.theme.MyApplicationTheme // Garanta que seu tema está aqui
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            // Tema padrão do app
-            MaterialTheme {
+            // É uma boa prática envolver seu App no seu tema customizado
+            MyApplicationTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    // Chama a tela inicial
                     App()
                 }
             }
@@ -40,24 +39,22 @@ fun App() {
 
     NavHost(
         navController = navController,
-        startDestination = "login"
+        // CORREÇÃO APLICADA AQUI:
+        startDestination = "cadastro" // A primeira tela agora é a de cadastro
     ) {
         composable("login") { TelaLogin(navController) }
         composable("cadastro") { TelaCadastro(navController) }
-        composable("home") { TelaPrincipal(navController) }
-        //composable("cartoes") { TelaCartoes(navController) }
+        composable("home") { HomeScreen(navController) }
+        composable("cartoes") { TelaCartoes(navController) }
         composable("carros") { TelaCarros(navController) }
-        composable("cadastro_cartao") { TelaCadastroCartao(navController) }
+        composable("cadastro_cartao") { CadastroCartaoScreen(navController) }
     }
-}
-
-@Composable
-fun TelaPrincipal(navController: NavHostController) {
-
 }
 
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
 fun AppPreview() {
-    App()
+    MyApplicationTheme {
+        App()
+    }
 }

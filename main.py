@@ -16,7 +16,7 @@ def get_db_connection():
     return mysql.connector.connect(
         host="127.0.0.1",   # ajuste conforme seu servidor
         user="root",        # usuário do MySQL
-        password="M0e2n5d1s@", # senha do MySQL
+        password="unip123", # senha do MySQL
         database="TccBd"
     )
 
