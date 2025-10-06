@@ -26,7 +26,7 @@ interface CartaoApi {
 
     // O backend obterá o userID do token, não precisa enviar na URL
     @POST("cartoes")
-    fun addCartao(@Body cartao: Cartao): Call<Cartao>
+    suspend fun addCartao(@Body novoCartao: Cartao): Cartao
 
     // O ID do cartão a ser deletado é passado na URL
     @DELETE("cartoes/{cartaoId}")

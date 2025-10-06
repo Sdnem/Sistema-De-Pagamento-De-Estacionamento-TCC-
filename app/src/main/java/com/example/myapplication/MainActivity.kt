@@ -40,7 +40,7 @@ fun App() {
 
     NavHost(
         navController = navController,
-        startDestination = "login"
+        startDestination = "cadastro"
     ) {
         composable("login") { TelaLogin(navController) }
         composable("cadastro") { TelaCadastro(navController) }

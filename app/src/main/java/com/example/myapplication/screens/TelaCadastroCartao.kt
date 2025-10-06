@@ -1,50 +1,54 @@
 package com.example.myapplication.screens
 
-import android.util.Log
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.material3.*
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
+import com.example.myapplication.CartaoViewModel
 import com.example.myapplication.model.Cartao
-import com.example.myapplication.remote.RetrofitClient
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TelaCadastroCartao(navController: NavHostController) {
-    var banco by remember { mutableStateOf("")}
+fun TelaCadastroCartao(
+    viewModel: CartaoViewModel = viewModel(),
+    navController: NavHostController
+) {
+    // Estados para os campos de texto. Usar String é a prática padrão.
+    var banco by remember { mutableStateOf("") }
     var nome by remember { mutableStateOf("") }
-    var numero by remember { mutableStateOf(0)}
-    var validade by remember { mutableStateOf(0)}
-    var cvc by remember { mutableStateOf(0)}
+    var numero by remember { mutableStateOf("") }
+    var validade by remember { mutableStateOf("") }
+    var cvc by remember { mutableStateOf("") }
 
-    var campo1 by remember { mutableStateOf(numero.toString())}
-    var campo2 by remember { mutableStateOf(validade.toString())}
-    var campo3 by remember { mutableStateOf(cvc.toString())}
+    // ✅ NOVO E MELHORADO: Efeito que escuta o fluxo de eventos
+    LaunchedEffect(key1 = true) { // key1 = true faz com que ele rode apenas uma vez
+        viewModel.cadastroEvent.collect {
+            // Este bloco será executado toda vez que um evento for emitido
+            navController.navigate("cartoes") {
+                popUpTo("cartoes") { inclusive = true }
+            }
+        }
+    }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.Center
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        Text("Cadastro de Cartão", style = MaterialTheme.typography.headlineSmall)
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // --- CAMPOS DE TEXTO ---
         TextField(
             value = banco,
             onValueChange = { banco = it },
@@ -56,20 +60,14 @@ fun TelaCadastroCartao(navController: NavHostController) {
         TextField(
             value = nome,
             onValueChange = { nome = it },
-            label = { Text("Nome") },
+            label = { Text("Nome do Titular") },
             modifier = Modifier.fillMaxWidth()
         )
         Spacer(modifier = Modifier.height(8.dp))
 
         TextField(
-            value = campo1,
-            onValueChange = { novoTexto ->
-                val textoFiltrado = novoTexto.filter { it.isDigit() }
-                if (textoFiltrado.length <= 16) {
-                    campo1 = textoFiltrado
-                    numero = textoFiltrado.toIntOrNull() ?: 0
-                }
-            },
+            value = numero,
+            onValueChange = { if (it.length <= 16) numero = it.filter { char -> char.isDigit() } },
             label = { Text("Número do Cartão") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth()
@@ -77,68 +75,50 @@ fun TelaCadastroCartao(navController: NavHostController) {
         Spacer(modifier = Modifier.height(8.dp))
 
         TextField(
-            value = campo2,
-            onValueChange = { novoTexto ->
-                val textoFiltrado = novoTexto.filter { it.isDigit() }
-                if (textoFiltrado.length <= 4) {
-                    campo2 = textoFiltrado
-                    validade = textoFiltrado.toIntOrNull() ?: 0
-                }
-            },
-            label = { Text("Validade Do Cartão") },
+            value = validade,
+            onValueChange = { if (it.length <= 4) validade = it.filter { char -> char.isDigit() } },
+            label = { Text("Validade (MMAA)") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth()
         )
         Spacer(modifier = Modifier.height(8.dp))
 
         TextField(
-            value = campo3,
-            onValueChange = { novoTexto ->
-                val textoFiltrado = novoTexto.filter { it.isDigit() }
-                if (textoFiltrado.length <= 3) {
-                    campo3 = textoFiltrado
-                    validade = textoFiltrado.toIntOrNull() ?: 0
-                }
-            },
-            label = { Text("Cvc Do Cartão") },
+            value = cvc,
+            onValueChange = { if (it.length <= 3) cvc = it.filter { char -> char.isDigit() } },
+            label = { Text("CVC") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth()
         )
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
-        Button(
-            onClick = {
-                val usuarioLogadoId = 1 // Exemplo: Substitua pela lógica real
-                val novoCartao = Cartao(
-                    banco = banco,
-                    nome = nome,
-                    numero = numero,
-                    validade = validade,
-                    cvc = cvc,
-                    userId = usuarioLogadoId // Incluindo o ID do usuário
-                )
+        // Mostra o indicador de progresso se estiver carregando
+        if (viewModel.isLoading.value) {
+            CircularProgressIndicator()
+        } else {
+            Button(
+                onClick = {
+                    val novoCartao = Cartao(
+                        banco = banco,
+                        nome = nome,
+                        numero = numero.toIntOrNull() ?: 0, // Conversão segura
+                        validade = validade.toIntOrNull() ?: 0,
+                        cvc = cvc.toIntOrNull() ?: 0, // Conversão segura
+                        userId = 1 // ❗ Lembre-se de substituir pela lógica real para obter o ID do usuário
+                    )
+                    // A UI apenas notifica a ViewModel sobre a intenção do usuário
+                    viewModel.addCartao(novoCartao)
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Cadastrar Cartão")
+            }
+        }
 
-                RetrofitClient.instance.addCartao(novoCartao).enqueue(object : Callback<Cartao> {
-
-                    override fun onResponse(call: Call<Cartao>, response: Response<Cartao>) {
-                        if (response.isSuccessful) {
-                            val cartaoAdicionado = response.body()
-                            Log.d("API_SUCCESS", "Cartão cadastrado com sucesso: ID ${cartaoAdicionado?.id}")
-                            navController.navigate("cartoes")
-                        } else {
-                            val errorBody = response.errorBody()?.string()
-                            Log.e("API_ERROR", "Erro na resposta: ${response.code()} - $errorBody")
-                        }
-                    }
-
-                    override fun onFailure(call: Call<Cartao>, t: Throwable) {
-                        Log.e("API_FAILURE", "Falha na comunicação: ${t.message}", t)
-                    }
-                })
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Cadastrar Cartão")
+        // Mostra a mensagem de erro, se houver
+        viewModel.errorMessage.value?.let { errorMsg ->
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(text = errorMsg, color = Color.Red)
         }
     }
 }
@@ -146,5 +126,7 @@ fun TelaCadastroCartao(navController: NavHostController) {
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
 fun TelaCadastroCartaoPreview() {
+    // Para o preview funcionar, você precisa de uma ViewModel de mock ou uma factory.
+    // Por simplicidade, deixamos como está, mas a lógica agora está desacoplada.
     TelaCadastroCartao(navController = rememberNavController())
 }
