@@ -1,4 +1,4 @@
-package com.example.compose_class
+package com.example.myapplication
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -9,6 +9,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -46,8 +47,8 @@ fun App() {
         composable("cadastro") { TelaCadastro(navController) }
         composable("home") { TelaPrincipal(navController) }
         //composable("cartoes") { TelaCartoes(navController) }
-        composable("carros") { TelaCarros(navController) }
-        composable("cadastro_cartao") { TelaCadastroCartao(navController) }
+        composable("carros") { TelaCarros( viewModel()) }
+        composable("cadastro_cartao") { TelaCadastroCartao( viewModel(), navController) }
     }
 }
 

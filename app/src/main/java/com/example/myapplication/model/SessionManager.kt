@@ -3,8 +3,13 @@ package com.example.myapplication.model
 import android.content.Context
 import android.content.SharedPreferences
 
+interface SessionManager {
+    fun saveAuthToken(token: String)
+    fun fetchAuthToken(): String?
+}
+
 // Classe para gerenciar o token do usuário
-class SessionManager(context: Context) {
+class SessionManagerImpl(context: Context) : SessionManager {
     private var prefs: SharedPreferences =
         context.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
 
@@ -12,15 +17,14 @@ class SessionManager(context: Context) {
         const val AUTH_TOKEN = "auth_token"
     }
 
-    // Salva o token após o login
-    fun saveAuthToken(token: String) {
+    // A anotação @Override é adicionada para indicar que vem da interface
+    override fun saveAuthToken(token: String) {
         val editor = prefs.edit()
         editor.putString(AUTH_TOKEN, token)
         editor.apply()
     }
 
-    // Busca o token para usar nas chamadas de API
-    fun fetchAuthToken(): String? {
+    override fun fetchAuthToken(): String? {
         return prefs.getString(AUTH_TOKEN, null)
     }
 }

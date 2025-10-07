@@ -14,14 +14,15 @@ import androidx.navigation.compose.rememberNavController
 import com.example.myapplication.CartaoViewModel
 import com.example.myapplication.CartaoViewModelFactory
 import com.example.myapplication.model.SessionManager
-import com.example.myapplication.model.Cartao 
+import com.example.myapplication.model.Cartao
+import com.example.myapplication.model.SessionManagerImpl
 
 @Composable
 fun TelaCartoes(
     navController: NavController,
     // A ViewModel é injetada aqui. O Context é necessário para o SessionManager.
     viewModel: CartaoViewModel = viewModel(
-        factory = CartaoViewModelFactory(SessionManager(LocalContext.current))
+        factory = CartaoViewModelFactory(SessionManagerImpl(LocalContext.current))
     )
 ) {
     // Coleta o estado da ViewModel. A UI irá recompor automaticamente quando esses valores mudarem.

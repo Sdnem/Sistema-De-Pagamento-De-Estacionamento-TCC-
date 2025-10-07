@@ -1,8 +1,10 @@
 package com.example.myapplication.remote
 
+import com.example.myapplication.model.Carro
 import com.example.myapplication.model.Cartao
 import com.example.myapplication.model.Usuario
 import okhttp3.ResponseBody
+import retrofit2.Response
 import retrofit2.Call
 import retrofit2.http.Body
 import retrofit2.http.DELETE
@@ -31,4 +33,18 @@ interface CartaoApi {
     // O ID do cartão a ser deletado é passado na URL
     @DELETE("cartoes/{cartaoId}")
     fun deleteCartao(@Path("cartaoId") cartaoId: Int): Call<Void>
+}
+
+interface CarroApi {
+    // O backend obterá o usuário pelo token
+    @GET("carros")
+    fun getCarro(): Call<List<Carro>>
+
+    // O backend obterá o userID do token, não precisa enviar na URL
+    @POST("carros")
+    suspend fun addCarro(@Body novoCarro: Carro): Carro
+
+    // O ID do cartão a ser deletado é passado na URL
+    @DELETE("carro/{carroId}")
+    fun deleteCarro(@Path("carroId") carroId: Int): Call<Void>
 }

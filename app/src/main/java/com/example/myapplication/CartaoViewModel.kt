@@ -41,7 +41,7 @@ class CartaoViewModel(private val sessionManager: SessionManager) : ViewModel() 
         }
         isLoading.value = true
         errorMessage.value = null
-        RetrofitClient.getInstance(token).getCartoes().enqueue(object : Callback<List<Cartao>> {
+        RetrofitClient.getInstanceCartao(token).getCartoes().enqueue(object : Callback<List<Cartao>> {
             override fun onResponse(call: Call<List<Cartao>>, response: Response<List<Cartao>>) {
                 if (response.isSuccessful) {
                     _cartoes.value = response.body() ?: emptyList()
@@ -72,7 +72,7 @@ class CartaoViewModel(private val sessionManager: SessionManager) : ViewModel() 
 
             try {
                 // 1. A chamada de rede agora é direta. O 'await' é implícito em funções suspend.
-                val cartaoAdicionado = RetrofitClient.getInstance(token).addCartao(novoCartao)
+                val cartaoAdicionado = RetrofitClient.getInstanceCartao(token).addCartao(novoCartao)
 
                 // 2. O código que estava no 'onResponse' bem-sucedido vem aqui.
                 val listaAtual = _cartoes.value?.toMutableList() ?: mutableListOf()
@@ -106,7 +106,7 @@ class CartaoViewModel(private val sessionManager: SessionManager) : ViewModel() 
             errorMessage.value = "Sessão expirada. Faça login novamente."
             return
         }
-        RetrofitClient.getInstance(token).deleteCartao(cartaoId).enqueue(object : Callback<Void> {
+        RetrofitClient.getInstanceCartao(token).deleteCartao(cartaoId).enqueue(object : Callback<Void> {
             override fun onResponse(call: Call<Void>, response: Response<Void>) {
                 if (response.isSuccessful) {
                     val listaAtualizada = _cartoes.value.toMutableList()
