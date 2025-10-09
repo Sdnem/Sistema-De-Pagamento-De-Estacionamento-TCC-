@@ -223,32 +223,85 @@ fun HistoryItem(place: String, value: String, date: String) {
     }
 }
 
-
-// --- Previews para visualizar no Android Studio ---
-
 @Preview(showBackground = true, name = "Tela Principal - Sem Ticket")
 @Composable
-fun MainScreenPreview_NoTicket() {
-    // Para o preview funcionar, envolva-o em um tema.
-    // Substitua `YourAppTheme` pelo nome do tema do seu projeto.
-    // YourAppTheme {
-    MainParkingScreen()
-    // }
+fun ParkingScreenPreview_NoTicket() {
+    // É uma boa prática envolver a preview em um tema.
+    // Se você tiver um tema customizado, substitua MaterialTheme por ele.
+    MaterialTheme {
+        MainParkingScreen()
+    }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Preview(showBackground = true, name = "Tela Principal - Com Ticket Ativo")
 @Composable
-fun MainScreenPreview_WithTicket() {
-    // Crio um Composable separado para forçar o estado no preview
-    val ScreenWithTicketActive: @Composable () -> Unit = {
-        var hasActiveTicket by remember { mutableStateOf(true) } // Força o estado inicial para true
-        // O resto é igual ao original, mas não vou repetir a lógica inteira aqui.
-        // A maneira mais fácil é modificar o MainParkingScreen para aceitar um estado inicial.
-        // Por simplicidade aqui, você pode mudar o `mutableStateOf(false)` para `true` no Composable principal
-        // para visualizar o outro estado no preview.
+fun ParkingScreenPreview_WithTicket() {
+    MaterialTheme {
+        // O estado é definido como 'true' para esta preview
+        var hasActiveTicket by remember { mutableStateOf(true) }
+
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Olá, [Nome do Usuário]!") },
+                    navigationIcon = {
+                        IconButton(onClick = { }) {
+                            Icon(Icons.Default.Menu, contentDescription = "Menu")
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { }) {
+                            Icon(Icons.Default.Notifications, contentDescription = "Notificações")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                )
+            }
+        ) { innerPadding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                // A condição mostrará a tela de ticket ativo
+                if (hasActiveTicket) {
+                    ActiveTicketInfo()
+                } else {
+                    ScanNewTicketAction()
+                }
+
+                InfoCard(
+                    icon = Icons.Default.DirectionsCar,
+                    title = "Veículo Cadastrado",
+                    line1 = "ABC-1234",
+                    line2 = "Honda Civic",
+                    actionText = "Trocar",
+                    onActionClick = { }
+                )
+
+                InfoCard(
+                    icon = Icons.Default.CreditCard,
+                    title = "Forma de Pagamento",
+                    line1 = "Crédito Final 5678",
+                    actionText = "Alterar",
+                    onActionClick = { }
+                )
+
+                RecentHistory()
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(onClick = { hasActiveTicket = !hasActiveTicket }) {
+                    Text(if (hasActiveTicket) "Simular Saída" else "Simular Leitura de Ticket")
+                }
+            }
+        }
     }
-    // YourAppTheme {
-    // O ideal seria MainParkingScreen(initialState = true)
-    // Mas para este exemplo, altere a linha 18 para `mutableStateOf(true)` para ver este preview.
-    // }
 }

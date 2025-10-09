@@ -9,12 +9,10 @@ import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -22,22 +20,28 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
-import androidx.navigation.compose.rememberNavController
 import coil.compose.AsyncImage
 import com.example.myapplication.CarManagementViewModel
 import com.example.myapplication.model.Carro
-import com.example.myapplication.model.SessionManager
-import com.example.myapplication.teste.FakeSessionManager
+import com.example.myapplication.teste.TelaCarrosContent
 
 // 1. O Composable principal da Tela
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TelaCarros(
     viewModel: CarManagementViewModel = viewModel(),
-    //navController: NavHostController
+    navController: NavHostController
 ) {
     val carList by viewModel.carros.collectAsState()
     val canAddCar = carList.size < 3
+
+    // A UI agora está em um Composable separado
+    TelaCarrosContent(
+        carList = carList,
+        onAddCarClick = { viewModel.addExampleCar() },
+        onDeleteCarClick = { carId -> viewModel.deletarCarro(carId) },
+        onEditCarClick = { /* TODO: Lógica de edição */ }
+    )
 
     Scaffold(
         topBar = {
@@ -199,27 +203,74 @@ fun EmptyState(
     }
 }
 
-// Preview para visualizar no Android Studio
-@Preview(showBackground = true)
+@Preview(showBackground = true, name = "Tela de Carros - Estado Vazio")
 @Composable
-fun TelaCarrosPreview_WithCars() {
-    val fakeSessionManager = FakeSessionManager()
-    val previeViewModel = CarManagementViewModel(fakeSessionManager)
-    previeViewModel.addExampleCar() // Adiciona o HB20 de exemplo
-
-    TelaCarros(viewModel = previeViewModel)
+fun TelaCarrosPreview_EstadoVazio() {
+    MaterialTheme {
+        // Chamamos o Composable de UI diretamente com uma lista vazia
+        TelaCarrosContent(
+            carList = emptyList(), // Forçando o estado vazio
+            onAddCarClick = {},
+            onDeleteCarClick = {},
+            onEditCarClick = {}
+        )
+    }
 }
 
-@Preview(showBackground = true)
+@OptIn( ExperimentalMaterial3Api::class)
+@Preview(showBackground = true, name = "Tela de Carros - Com Lista")
 @Composable
-fun TelaCarrosPreview_Empty() {
-    MaterialTheme {
-        val fakeSessionManager = FakeSessionManager()
-        val carroViewModel = CarManagementViewModel(sessionManager = fakeSessionManager)
-        val previewViewModel = carroViewModel
+fun TelaCarrosPreview_ComLista() {
+    // 1. Criamos uma lista de dados falsos para a visualização
+    val carrosDeExemplo = listOf(
+        Carro(
+            id = 1,
+            marca = "Honda",
+            modelo = "Civic",
+            ano = 2023,
+            placa = "ABC-1234",
+            cor = "Preto",
+            imageUrl = "https://www.honda.com.br/automoveis/sites/hab/files/2023-01/Civic-Hibrido-MY23-Frente-3-4_0.png", // URL de imagem de exemplo
+            userId = 1
+        ),
+        Carro(
+            id = 2,
+            marca = "Toyota",
+            modelo = "Corolla",
+            ano = 2022,
+            placa = "XYZ-5678",
+            cor = "Branco",
+            imageUrl = "https://www.toyota.com.br/imagens/malba/stage-corolla-altis-hybrid-premium-branco-lunar.png", // URL de imagem de exemplo
+            userId = 2
+        )
+    )
 
-        // Forçando o estado vazio
-        previewViewModel.deletarCarro(1) // Remove o carro inicial
-        TelaCarros(viewModel = previewViewModel)
+    MaterialTheme {
+        // 2. Recriamos a estrutura do Scaffold e TopAppBar da tela original
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Meus Carros") },
+                    actions = {
+                        // Botão desabilitado se a lista estiver cheia (3 ou mais)
+                        Button(onClick = { }, enabled = carrosDeExemplo.size < 3) {
+                            Text("+ Adicionar Carro")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                )
+            }
+        ) { paddingValues ->
+            // 3. Chamamos diretamente o Composable `CarList` com os dados falsos
+            CarList(
+                cars = carrosDeExemplo,
+                onEditClick = {}, // Ações de clique não fazem nada na preview
+                onDeleteClick = {},
+                modifier = Modifier.padding(paddingValues)
+            )
+        }
     }
 }

@@ -13,7 +13,6 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.example.myapplication.CartaoViewModel
 import com.example.myapplication.CartaoViewModelFactory
-import com.example.myapplication.model.SessionManager
 import com.example.myapplication.model.Cartao
 import com.example.myapplication.model.SessionManagerImpl
 
@@ -66,7 +65,7 @@ fun TelaCartoes(
                             Button(
                                 onClick = {
                                     // A lógica de remoção agora está na ViewModel.
-                                    // O ID do cartão pode ser nulo ao criar, mas nunca será ao ser listado do BD. [cite: 5]
+                                    // O ID do cartão pode ser nulo ao criar, mas nunca será ao ser listado do BD.
                                     cartao.id?.let { viewModel.deletarCartao(it) }
                                 },
                                 modifier = Modifier.align(Alignment.End),
@@ -93,13 +92,76 @@ fun TelaCartoes(
     }
 }
 
-// Preview pode ser simplificado, pois a lógica está na ViewModel.
-@Preview(showBackground = true)
+@Preview(showBackground = true, name = "Tela de Cartões - Estado Vazio")
 @Composable
-fun TelaCartoesPreview() {
-    // Para o preview, podemos passar uma NavController de mentira.
-    // A ViewModel não será criada no modo preview.
-    // TelaCartoes(navController = rememberNavController())
-    // O ideal seria criar um preview estático sem a viewModel
-    Text("Preview da Tela de Cartões")
+fun TelaCartoesPreview_EstadoVazio() {
+    MaterialTheme {
+        // A chamada padrão para a tela já resulta no estado vazio,
+        // pois o ViewModel da preview não tem acesso ao banco de dados.
+        TelaCartoes(navController = rememberNavController())
+    }
+}
+
+/**
+ * Preview 2: Tela com uma lista de cartões já cadastrados.
+ * Para isso, recriamos a UI da tela e fornecemos uma lista de dados falsos (mock data),
+ * permitindo visualizar como os itens do LazyColumn serão renderizados.
+ */
+@Preview(showBackground = true, name = "Tela de Cartões - Com Lista")
+@Composable
+fun TelaCartoesPreview_ComListaDeCartoes() {
+    // Lista de dados falsos para a preview
+    val listaDeCartoesFalsos = listOf(
+        Cartao(id = 1, nome = "J. SILVA", numero = 1111222233334444L, banco = "Banco Digital", validade = 2025, cvc = 123, userId = 1),
+        Cartao(id = 2, nome = "M. PEREIRA", numero = 5555666677778888L, banco = "Banco Vermelho", validade = 2028, cvc = 321, userId = 2),
+        Cartao(id = 3, nome = "A. COSTA", numero = 9999888877776666L, banco = "Caixa", validade = 2030, cvc = 987, userId = 3)
+    )
+
+    MaterialTheme {
+        // Recriamos a estrutura da "TelaCartoes" aqui para poder injetar os dados falsos.
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+        ) {
+            Text("Meus Cartões", style = MaterialTheme.typography.headlineMedium)
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Usamos a lista de dados falsos no LazyColumn
+            LazyColumn(modifier = Modifier.weight(1f)) {
+                items(listaDeCartoesFalsos, key = { it.id!! }) { cartao ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    elevation = CardDefaults.cardElevation(4.dp)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Nome: ${cartao.nome}")
+                        Text("Número: **** **** **** ${cartao.numero % 10000}")
+                        Text("Banco: ${cartao.banco}")
+
+                        Button(
+                            onClick = { /* Ação de remover na preview não faz nada */ },
+                            modifier = Modifier.align(Alignment.End),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error) // [cite: 65]
+                        ) {
+                            Text("Remover")
+                        }
+                    }
+                }
+            }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Button(
+                onClick = { /* Ação de adicionar na preview não faz nada */ },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Adicionar Cartão")
+            }
+        }
+    }
 }

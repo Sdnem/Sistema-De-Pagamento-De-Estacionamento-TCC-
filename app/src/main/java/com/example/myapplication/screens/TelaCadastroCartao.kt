@@ -1,5 +1,6 @@
 package com.example.myapplication.screens
 
+import android.annotation.SuppressLint
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
@@ -13,13 +14,14 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
-import com.example.myapplication.CartaoViewModel
 import com.example.myapplication.model.Cartao
+import com.example.myapplication.teste.CartaoViewModelTeste
+import com.example.myapplication.teste.FakeCartaoViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TelaCadastroCartao(
-    viewModel: CartaoViewModel = viewModel(),
+    viewModel: CartaoViewModelTeste = viewModel(),
     navController: NavHostController
 ) {
     // Estados para os campos de texto. Usar String é a prática padrão.
@@ -101,7 +103,7 @@ fun TelaCadastroCartao(
                     val novoCartao = Cartao(
                         banco = banco,
                         nome = nome,
-                        numero = numero.toIntOrNull() ?: 0, // Conversão segura
+                        numero = numero.toLongOrNull() ?: 0L, // Conversão segura
                         validade = validade.toIntOrNull() ?: 0,
                         cvc = cvc.toIntOrNull() ?: 0, // Conversão segura
                         userId = 1 // ❗ Lembre-se de substituir pela lógica real para obter o ID do usuário
@@ -123,10 +125,41 @@ fun TelaCadastroCartao(
     }
 }
 
-@Preview(showBackground = true, showSystemUi = true)
+// Preview do estado padrão (formulário vazio)
+@SuppressLint("ViewModelConstructorInComposable")
+@Preview(showBackground = true, name = "Cadastro - Estado Padrão")
 @Composable
-fun TelaCadastroCartaoPreview() {
-    // Para o preview funcionar, você precisa de uma ViewModel de mock ou uma factory.
-    // Por simplicidade, deixamos como está, mas a lógica agora está desacoplada.
-    TelaCadastroCartao(navController = rememberNavController())
+fun TelaCadastroCartaoPreview_Default() {
+    MaterialTheme {
+        TelaCadastroCartao(
+            viewModel = FakeCartaoViewModel(initialIsLoading = false, initialErrorMessage = null),
+            navController = rememberNavController()
+        )
+    }
+}
+
+// Preview do estado de "Carregando"
+@SuppressLint("ViewModelConstructorInComposable")
+@Preview(showBackground = true, name = "Cadastro - Carregando")
+@Composable
+fun TelaCadastroCartaoPreview_Loading() {
+    MaterialTheme {
+        TelaCadastroCartao(
+            viewModel = FakeCartaoViewModel(initialIsLoading = true), // <-- A mágica acontece aqui
+            navController = rememberNavController()
+        )
+    }
+}
+
+// Preview com uma mensagem de erro
+@SuppressLint("ViewModelConstructorInComposable")
+@Preview(showBackground = true, name = "Cadastro - Com Erro")
+@Composable
+fun TelaCadastroCartaoPreview_Error() {
+    MaterialTheme {
+        TelaCadastroCartao(
+            viewModel = FakeCartaoViewModel(initialErrorMessage = "Número de cartão inválido."), // <-- E aqui
+            navController = rememberNavController()
+        )
+    }
 }

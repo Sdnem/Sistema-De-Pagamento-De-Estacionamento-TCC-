@@ -26,6 +26,7 @@ import com.example.myapplication.remote.RetrofitInstance
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
+import androidx.compose.ui.Alignment
 
 @Composable
 fun TelaLogin(navController: NavController) {
@@ -34,8 +35,11 @@ fun TelaLogin(navController: NavController) {
     var mensagem by remember { mutableStateOf("") }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.Center
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally // Alinha o conteúdo no centro
     ) {
         TextField(
             value = email,
@@ -81,8 +85,23 @@ fun TelaLogin(navController: NavController) {
             Text("Entrar")
         }
 
+        // --- BOTÃO DE RECUPERAÇÃO DE SENHA ADICIONADO AQUI ---
+        TextButton(
+            onClick = {
+                // Navega para a nova tela de recuperação de senha
+                navController.navigate("telaRecuperacaoSenha")
+            },
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+        ) {
+            Text("Esqueceu a senha?")
+        }
+        // --------------------------------------------------------
+
         Spacer(modifier = Modifier.height(8.dp))
-        Text(mensagem, color = MaterialTheme.colorScheme.error)
+        // Mostra a mensagem de erro se ela não estiver vazia
+        if (mensagem.isNotEmpty()) {
+            Text(mensagem, color = MaterialTheme.colorScheme.error)
+        }
     }
 }
 

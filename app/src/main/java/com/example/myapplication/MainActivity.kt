@@ -1,5 +1,6 @@
 package com.example.myapplication
 
+import TelaCartoes
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -46,8 +47,8 @@ fun App() {
         composable("login") { TelaLogin(navController) }
         composable("cadastro") { TelaCadastro(navController) }
         composable("home") { TelaPrincipal(navController) }
-        //composable("cartoes") { TelaCartoes(navController) }
-        composable("carros") { TelaCarros( viewModel()) }
+        composable("cartoes") { TelaCartoes(navController) }
+        composable("carros") { TelaCarros( viewModel(), navController) }
         composable("cadastro_cartao") { TelaCadastroCartao( viewModel(), navController) }
     }
 }
