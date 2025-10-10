@@ -1,34 +1,51 @@
 package com.example.myapplication.remote
 
-import com.example.myapplication.model.Cartao
-import com.example.myapplication.model.Usuario
-import okhttp3.ResponseBody
-import retrofit2.Call
+import com.google.gson.JsonObject
+import retrofit2.Response
 import retrofit2.http.Body
-import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.Header
 import retrofit2.http.POST
 import retrofit2.http.Path
 
+// Modelo de dados para a lista de cartões
+data class CartaoResponse(
+    val id: Int,
+    val numero: String,
+    val nome: String,
+    val validade: String
+)
+
+// NOVO: Modelo de dados para a resposta do check-in
+data class CheckInResponse(
+    val status: String,
+    val mensagem: String,
+    val sessao_id: Int,
+    val horario_entrada: String // Formato ISO, ex: "2024-10-27T10:00:00"
+)
+
 interface ApiService {
+
     @POST("usuarios/cadastrar")
-    fun cadastrar(@Body usuario: Usuario): Call<ResponseBody>
+    suspend fun cadastrarUsuario(@Body usuarioJson: JsonObject): Response<JsonObject>
 
     @POST("usuarios/login")
-    fun login(@Body usuario: Usuario): Call<Map<String, String>>
+    suspend fun login(@Body loginRequest: JsonObject): Response<JsonObject>
 
-}
+    @POST("cartoes/cadastrar")
+    suspend fun cadastrarCartao(
+        @Header("Authorization") token: String,
+        @Body cartaoJson: JsonObject
+    ): Response<JsonObject>
 
-interface CartaoApi {
-    // O backend obterá o usuário pelo token
-    @GET("cartoes")
-    fun getCartoes(): Call<List<Cartao>>
+    @GET("cartoes/{usuario_id}")
+    suspend fun getCartoesDoUsuario(
+        @Path("usuario_id") usuarioId: Int
+    ): Response<List<CartaoResponse>>
 
-    // O backend obterá o userID do token, não precisa enviar na URL
-    @POST("cartoes")
-    fun addCartao(@Body cartao: Cartao): Call<Cartao>
-
-    // O ID do cartão a ser deletado é passado na URL
-    @DELETE("cartoes/{cartaoId}")
-    fun deleteCartao(@Path("cartaoId") cartaoId: Int): Call<Void>
+    // ==========================================================
+    // NOVA FUNÇÃO PARA REGISTRAR ENTRADA (CHECK-IN)
+    // ==========================================================
+    @POST("sessoes/checkin")
+    suspend fun registrarCheckIn(@Body checkInJson: JsonObject): Response<CheckInResponse>
 }

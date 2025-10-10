@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?><network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+
+        <!-- O seu IP atual, para testes em dispositivos físicos -->
+        <domain includeSubdomains="true">192.168.0.172</domain>
+
+        <!--
+        ==================================================================
+        LINHA ADICIONADA AQUI:
+        Endereço especial para o emulador Android se conectar ao seu PC.
+        ==================================================================
+        -->
+        <domain includeSubdomains="true">10.0.2.2</domain>
+
+    </domain-config>
+</network-security-config>

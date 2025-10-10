@@ -3,24 +3,57 @@ package com.example.myapplication.model
 import android.content.Context
 import android.content.SharedPreferences
 
-// Classe para gerenciar o token do usuário
-class SessionManager(context: Context) {
-    private var prefs: SharedPreferences =
-        context.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
+/**
+ * Objeto Singleton para gerenciar a sessão do usuário usando SharedPreferences.
+ * Sendo um 'object', só existe uma instância dele em todo o app e suas funções
+ * podem ser chamadas diretamente (Ex: SessionManager.getUserId(...)).
+ */
+object SessionManager {
 
-    companion object {
-        const val AUTH_TOKEN = "auth_token"
+    private const val PREFS_NAME = "MyAppSession"
+    private const val USER_ID = "user_id"
+    // NOVA CONSTANTE para salvar o nome do usuário
+    private const val USER_NAME = "user_name"
+
+    // Função auxiliar para não repetir código
+    private fun getPrefs(context: Context): SharedPreferences {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
 
-    // Salva o token após o login
-    fun saveAuthToken(token: String) {
-        val editor = prefs.edit()
-        editor.putString(AUTH_TOKEN, token)
+    /**
+     * Salva os dados do usuário após o login.
+     * MUDANÇA: Agora salva o ID e o NOME.
+     */
+    fun saveUserData(context: Context, userId: Int, userName: String?) {
+        val editor = getPrefs(context).edit()
+        editor.putInt(USER_ID, userId)
+        editor.putString(USER_NAME, userName) // Salva o nome
         editor.apply()
     }
 
-    // Busca o token para usar nas chamadas de API
-    fun fetchAuthToken(): String? {
-        return prefs.getString(AUTH_TOKEN, null)
+    /**
+     * Busca o ID do usuário salvo.
+     * Retorna -1 se não houver ID salvo.
+     */
+    fun getUserId(context: Context): Int {
+        return getPrefs(context).getInt(USER_ID, -1)
+    }
+
+    /**
+     * NOVA FUNÇÃO para buscar o nome do usuário salvo.
+     * Retorna null se não houver nome salvo.
+     * É esta função que a HomeScreen vai chamar.
+     */
+    fun getUserName(context: Context): String? {
+        return getPrefs(context).getString(USER_NAME, null)
+    }
+
+    /**
+     * Limpa todos os dados da sessão (usado para logout).
+     */
+    fun clearSession(context: Context) {
+        val editor = getPrefs(context).edit()
+        editor.clear()
+        editor.apply()
     }
 }

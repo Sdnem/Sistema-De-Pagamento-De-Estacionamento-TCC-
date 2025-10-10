@@ -1,15 +1,19 @@
+gitignore
+# Arquivos de IDE, sistema e builds
+.idea/
+.vscode/
 *.iml
-.gradle
+*.DS_Store
+build/
 /local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
-local.properties
+.gradle/
+*.apk
+*.aab
+
+# Arquivos Python e ambiente virtual
+venv/
+__pycache__/
+*.pyc
+
+# Arquivos de configuração gerados automaticamente
+.idea/studiobot.xml

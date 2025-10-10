@@ -1,84 +1,104 @@
 package com.example.myapplication
 
-import androidx.compose.runtime.mutableStateOf
+// CORREÇÃO: Removida a importação duplicada do 'Context'
+import android.content.Context
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.myapplication.model.Cartao
 import com.example.myapplication.model.SessionManager
+import com.example.myapplication.remote.CartaoResponse
 import com.example.myapplication.remote.RetrofitClient
+import com.google.gson.JsonObject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
 
-class CartaoViewModel(private val sessionManager: SessionManager) : ViewModel() {
+// Estados para a ação de CADASTRAR um cartão (já existente)
+sealed class CadastroCartaoState {
+    object Idle : CadastroCartaoState()
+    object Loading : CadastroCartaoState()
+    object Success : CadastroCartaoState()
+    data class Error(val message: String) : CadastroCartaoState()
+}
 
-    // StateFlow para expor a lista de cartões para a UI
-    private val _cartoes = MutableStateFlow<List<Cartao>>(emptyList())
-    val cartoes: StateFlow<List<Cartao>> = _cartoes
+// NOVO: Estados para a ação de LISTAR os cartões na tela
+sealed class ListaCartoesState {
+    object Loading : ListaCartoesState()
+    data class Success(val cartoes: List<CartaoResponse>) : ListaCartoesState()
+    data class Error(val message: String) : ListaCartoesState()
+}
 
-    // Estado para controlar o loading
-    val isLoading = mutableStateOf(false)
-    val errorMessage = mutableStateOf<String?>(null)
+class CartaoViewModel : ViewModel() {
 
-    init {
-        // Carrega os cartões assim que a ViewModel é criada
-        buscarCartoesDoUsuario()
+    // --- LÓGICA DE CADASTRO (existente, sem alterações) ---
+    private val _cadastroState = MutableStateFlow<CadastroCartaoState>(CadastroCartaoState.Idle)
+    val cadastroState: StateFlow<CadastroCartaoState> = _cadastroState
+
+    fun cadastrarCartao(context: Context, numero: String, nome: String, validade: String, cvv: String) {
+        val userId = SessionManager.getUserId(context)
+        if (userId == -1) {
+            _cadastroState.value = CadastroCartaoState.Error("ID do usuário não encontrado.")
+            return
+        }
+        viewModelScope.launch {
+            _cadastroState.value = CadastroCartaoState.Loading
+            try {
+                val cartaoJson = JsonObject().apply {
+                    addProperty("numero", numero)
+                    addProperty("nome", nome)
+                    addProperty("validade", validade)
+                    addProperty("cvv", cvv)
+                    addProperty("usuario_id", userId)
+                }
+                val response = RetrofitClient.api.cadastrarCartao(token = "Bearer ", cartaoJson = cartaoJson)
+                if (response.isSuccessful) {
+                    _cadastroState.value = CadastroCartaoState.Success
+                } else {
+                    val errorBody = response.errorBody()?.string() ?: "Erro desconhecido."
+                    _cadastroState.value = CadastroCartaoState.Error(errorBody)
+                }
+            } catch (e: Exception) {
+                _cadastroState.value = CadastroCartaoState.Error("Falha na conexão: ${e.message}")
+            }
+        }
     }
 
-    fun buscarCartoesDoUsuario() {
-        val token = sessionManager.fetchAuthToken()
-        if (token == null) {
-            errorMessage.value = "Usuário não autenticado."
+    fun resetState() {
+        _cadastroState.value = CadastroCartaoState.Idle
+    }
+    // --- FIM DA LÓGICA DE CADASTRO ---
+
+    // --- NOVA LÓGICA PARA BUSCAR CARTÕES ---
+    private val _listaCartoesState = MutableStateFlow<ListaCartoesState>(ListaCartoesState.Loading)
+    val listaCartoesState: StateFlow<ListaCartoesState> = _listaCartoesState.asStateFlow()
+
+    fun buscarCartoes(context: Context) {
+        val userId = SessionManager.getUserId(context)
+        if (userId == -1) {
+            _listaCartoesState.value = ListaCartoesState.Error("Usuário não autenticado.")
             return
         }
 
-        isLoading.value = true
-        errorMessage.value = null
+        viewModelScope.launch {
+            _listaCartoesState.value = ListaCartoesState.Loading
+            try {
+                // Chama a nova função da API
+                val response = RetrofitClient.api.getCartoesDoUsuario(userId)
 
-        // Usa a instância do Retrofit que inclui o token
-        RetrofitClient.getInstance(token).getCartoes().enqueue(object : Callback<List<Cartao>> {
-            override fun onResponse(call: Call<List<Cartao>>, response: Response<List<Cartao>>) {
                 if (response.isSuccessful) {
-                    _cartoes.value = response.body() ?: emptyList()
+                    // Se sucesso, atualiza o estado com a lista de cartões recebida
+                    _listaCartoesState.value = ListaCartoesState.Success(response.body() ?: emptyList())
                 } else {
-                    errorMessage.value = "Erro ao buscar cartões."
+                    val errorMsg = "Erro ao buscar cartões: ${response.code()}"
+                    Log.e("CartaoViewModel", errorMsg)
+                    _listaCartoesState.value = ListaCartoesState.Error(errorMsg)
                 }
-                isLoading.value = false
+            } catch (e: Exception) {
+                val errorMsg = "Falha na conexão ao buscar cartões: ${e.message}"
+                Log.e("CartaoViewModel", errorMsg)
+                _listaCartoesState.value = ListaCartoesState.Error(errorMsg)
             }
-
-            override fun onFailure(call: Call<List<Cartao>>, t: Throwable) {
-                errorMessage.value = "Falha na conexão: ${t.message}"
-                isLoading.value = false
-            }
-        })
-    }
-
-    fun deletarCartao(cartaoId: Int) {
-        val token = sessionManager.fetchAuthToken()
-        if (token == null) {
-            errorMessage.value = "Sessão expirada. Faça login novamente."
-            return
         }
-
-        // Chama a API para deletar o cartão
-        RetrofitClient.getInstance(token).deleteCartao(cartaoId).enqueue(object : Callback<Void> {
-            override fun onResponse(call: Call<Void>, response: Response<Void>) {
-                if (response.isSuccessful) {
-                    // Se a remoção na API foi bem-sucedida, atualiza a lista localmente
-                    val listaAtualizada = _cartoes.value.toMutableList()
-                    listaAtualizada.removeAll { it.id == cartaoId }
-                    _cartoes.value = listaAtualizada
-                } else {
-                    errorMessage.value = "Não foi possível remover o cartão."
-                }
-            }
-
-            override fun onFailure(call: Call<Void>, t: Throwable) {
-                errorMessage.value = "Falha na conexão: ${t.message}"
-            }
-        })
     }
 }

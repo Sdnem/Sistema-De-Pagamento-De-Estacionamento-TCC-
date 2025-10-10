@@ -1,25 +1,24 @@
 package com.example.myapplication.remote
 
-import com.example.myapplication.model.AuthInterceptor
-import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
 object RetrofitClient {
-    private const val BASE_URL = "http://10.0.2.2:8000/api/" // Ajuste para o endpoint da API
+    // URL base da sua API.
+    // 10.0.2.2 é o endereço especial que o emulador Android usa para se conectar ao localhost do seu computador.
+    private const val BASE_URL = "http://192.168.0.172:8080/"
 
-    // Função para criar uma instância com o token
-    fun getInstance(token: String): CartaoApi {
-        val okHttpClient = OkHttpClient.Builder()
-            .addInterceptor(AuthInterceptor(token))
-            .build()
-
-        val retrofit = Retrofit.Builder()
+    // Instância única e "preguiçosa" (lazy) do Retrofit.
+    // Ela só será criada na primeira vez que for usada.
+    val instance: Retrofit by lazy {
+        Retrofit.Builder()
             .baseUrl(BASE_URL)
-            .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
+    }
 
-        return retrofit.create(CartaoApi::class.java)
+    // Instância única da nossa interface de API.
+    val api: ApiService by lazy {
+        instance.create(ApiService::class.java)
     }
 }
