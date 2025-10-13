@@ -1,6 +1,8 @@
 package com.example.myapplication.screens
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.getValue
@@ -15,6 +17,7 @@ import kotlinx.coroutines.delay
 import java.time.Duration
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
 import kotlin.math.ceil
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -26,29 +29,34 @@ fun TelaEstacionamentoAtivo(
     // Defina sua regra de negócio. Ex: R$ 5,00 por hora.
     val tarifaPorHora = 5.0
 
-    if (horarioEntradaString == null) {
+    // Validação robusta da entrada
+    val horarioEntrada = remember {
+        try {
+            if (horarioEntradaString != null) LocalDateTime.parse(horarioEntradaString, DateTimeFormatter.ISO_DATE_TIME) else null
+        } catch (e: DateTimeParseException) {
+            null // Retorna nulo se a string não estiver no formato esperado
+        }
+    }
+
+    if (horarioEntrada == null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Erro: Horário de entrada não encontrado.")
+            Text("Erro: Horário de entrada inválido ou não encontrado.")
         }
         return
     }
 
-    // Converte o horário (String) recebido da navegação para um objeto de data/hora
-    val formatter = DateTimeFormatter.ISO_DATE_TIME
-    val horarioEntrada = remember { LocalDateTime.parse(horarioEntradaString, formatter) }
-
     var duracao by remember { mutableStateOf(Duration.ZERO) }
     var custo by remember { mutableStateOf(0.0) }
 
-    // Este `LaunchedEffect` é o coração da tela, funciona como um cronômetro.
-    // Ele executa o bloco de código a cada 1 segundo.
+    // Este `LaunchedEffect` funciona como um cronômetro, atualizando a UI a cada segundo.
     LaunchedEffect(key1 = Unit) {
         while (true) {
             // Calcula a duração entre o horário de entrada e o horário atual
             duracao = Duration.between(horarioEntrada, LocalDateTime.now())
 
             // Lógica de cálculo de custo (fração de hora conta como hora cheia)
-            val horasTotais = ceil(duracao.toMillis() / 3600000.0).coerceAtLeast(1.0)
+            // Garante que a primeira hora seja cobrada, mesmo que por poucos segundos.
+            val horasTotais = ceil(duracao.toSeconds() / 3600.0).coerceAtLeast(1.0)
             custo = horasTotais * tarifaPorHora
 
             delay(1000) // Pausa por 1 segundo
@@ -70,7 +78,13 @@ fun TelaEstacionamentoAtivo(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("Sessão Ativa") })
+            TopAppBar(
+                title = { Text("Sessão Ativa") },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            )
         }
     ) { paddingValues ->
         Column(
@@ -83,7 +97,7 @@ fun TelaEstacionamentoAtivo(
         ) {
             Text(
                 text = "Tempo Decorrido",
-                style = MaterialTheme.typography.titleLarge
+                style = MaterialTheme.typography.headlineSmall
             )
             Text(
                 text = tempoFormatado,
@@ -96,7 +110,7 @@ fun TelaEstacionamentoAtivo(
 
             Text(
                 text = "Custo Atual",
-                style = MaterialTheme.typography.titleLarge
+                style = MaterialTheme.typography.headlineSmall
             )
             Text(
                 text = custoFormatado,
@@ -106,14 +120,25 @@ fun TelaEstacionamentoAtivo(
                 modifier = Modifier.padding(vertical = 16.dp)
             )
 
-            Spacer(modifier = Modifier.height(64.dp))
+            Spacer(modifier = Modifier.weight(1f)) // Empurra o botão para baixo
 
             Button(
-                onClick = { /* TODO: Implementar navegação para pagamento */ },
+                // ========================================================
+                // ATUALIZAÇÃO PRINCIPAL AQUI
+                // ========================================================
+                onClick = {
+                    // Navega para a câmera, especificando que o objetivo é o checkout.
+                    navController.navigate("camera?scanMode=checkout")
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp)
             ) {
+                Icon(
+                    imageVector = Icons.Filled.QrCodeScanner,
+                    contentDescription = "Escanear QR Code de Saída"
+                )
+                Spacer(Modifier.size(ButtonDefaults.IconSpacing))
                 Text("PAGAR E FINALIZAR SESSÃO", fontSize = 16.sp)
             }
         }

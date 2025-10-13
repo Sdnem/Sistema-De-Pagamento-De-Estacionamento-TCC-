@@ -1,151 +1,231 @@
 package com.example.myapplication.screens
 
+import android.Manifest
+import android.content.Context
+import android.util.Log
 import android.widget.Toast
-import androidx.camera.core.CameraSelector
-import androidx.camera.core.ImageAnalysis
-import androidx.camera.core.Preview
-import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.camera.view.PreviewView
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-// Imports necessários para o botão
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.content.ContextCompat
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import com.example.myapplication.CheckInState
-import com.example.myapplication.EstacionamentoViewModel
+import com.example.myapplication.CameraView
+import com.example.myapplication.model.SessionManager
+import com.example.myapplication.remote.RetrofitClient
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
-import com.google.accompanist.permissions.PermissionStatus
+import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
-import com.google.mlkit.vision.barcode.BarcodeScanning
-import com.google.mlkit.vision.common.InputImage
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
-fun CameraScreen(navController: NavController) {
+fun CameraScreen(
+    navController: NavController,
+    scanMode: String // "checkin" ou "checkout"
+) {
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-    val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
+    var isLoading by remember { mutableStateOf(false) }
 
-    val estacionamentoViewModel: EstacionamentoViewModel = viewModel()
-    val checkInState by estacionamentoViewModel.checkInState.collectAsState()
-    val isScanning = remember { mutableStateOf(true) }
-
-    val cameraPermissionState = rememberPermissionState(
-        android.Manifest.permission.CAMERA
-    )
-
-    LaunchedEffect(checkInState) {
-        when (val state = checkInState) {
-            is CheckInState.Success -> {
-                navController.navigate("estacionamento_ativo/${state.response.horario_entrada}") {
-                    popUpTo("home") { inclusive = false }
-                }
-                estacionamentoViewModel.resetState()
-            }
-            is CheckInState.Error -> {
-                Toast.makeText(context, "Falha no Check-in: ${state.message}", Toast.LENGTH_LONG).show()
-                estacionamentoViewModel.resetState()
-                isScanning.value = true
-            }
-            is CheckInState.Loading -> {
-                Toast.makeText(context, "Registrando entrada...", Toast.LENGTH_SHORT).show()
-            }
-            else -> { /* Estado Idle */ }
+    val permissionState = rememberPermissionState(permission = Manifest.permission.CAMERA)
+    LaunchedEffect(key1 = Unit) {
+        if (!permissionState.status.isGranted) {
+            permissionState.launchPermissionRequest()
         }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        if (cameraPermissionState.status == PermissionStatus.Granted) {
-            AndroidView(
-                factory = { ctx ->
-                    val previewView = PreviewView(ctx)
-                    val executor = ContextCompat.getMainExecutor(ctx)
-                    cameraProviderFuture.addListener({
-                        val cameraProvider = cameraProviderFuture.get()
-                        val preview = Preview.Builder().build().also {
-                            it.setSurfaceProvider(previewView.surfaceProvider)
-                        }
-                        val cameraSelector = CameraSelector.Builder()
-                            .requireLensFacing(CameraSelector.LENS_FACING_BACK)
-                            .build()
+        // A visualização da câmera fica no fundo
+        CameraView(
+            onBarCodeDetected = { barcodes ->
+                if (isLoading) return@CameraView
+                isLoading = true
 
-                        val imageAnalyser = ImageAnalysis.Builder()
-                            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                            .build()
-                            .also {
-                                it.setAnalyzer(executor) { imageProxy ->
-                                    if (isScanning.value) { // Só processa se estiver esperando um scan
-                                        val image = imageProxy.image
-                                        if (image != null) {
-                                            val inputImage = InputImage.fromMediaImage(image, imageProxy.imageInfo.rotationDegrees)
-                                            val scanner = BarcodeScanning.getClient()
-                                            scanner.process(inputImage)
-                                                .addOnSuccessListener { barcodes ->
-                                                    if (barcodes.isNotEmpty() && isScanning.value) {
-                                                        isScanning.value = false // Trava para evitar múltiplos scans
-                                                        estacionamentoViewModel.fazerCheckIn(context) // Inicia o processo
-                                                    }
-                                                }
-                                                .addOnCompleteListener {
-                                                    imageProxy.close() // Sempre fechar o proxy
-                                                }
-                                        } else {
-                                            imageProxy.close()
-                                        }
-                                    } else {
-                                        imageProxy.close()
-                                    }
-                                }
-                            }
+                barcodes.firstOrNull()?.rawValue?.let { barCodeValue ->
+                    handleScan(barCodeValue, scanMode, context, navController) {
+                        isLoading = false
+                    }
+                }
+            }
+        )
 
-                        cameraProvider.unbindAll()
-                        cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, preview, imageAnalyser)
-                    }, executor)
-                    previewView
+        // ========================================================
+        // BOTÃO DE SIMULAÇÃO UNIFICADO
+        // ========================================================
+        // Aparece em ambos os modos, desde que não esteja carregando
+        if (!isLoading) {
+            FloatingActionButton(
+                onClick = {
+                    isLoading = true
+                    // Simula a leitura do QR Code correspondente ao modo atual
+                    val simulatedQrValue = if (scanMode == "checkout") "checkout" else "checkin"
+                    handleScan(simulatedQrValue, scanMode, context, navController) {
+                        isLoading = false
+                    }
                 },
-                modifier = Modifier.fillMaxSize()
-            )
-        } else {
-            // Se a permissão não foi concedida, solicita novamente.
-            LaunchedEffect(Unit) {
-                cameraPermissionState.launchPermissionRequest()
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(32.dp),
+                containerColor = MaterialTheme.colorScheme.primary
+            ) {
+                Icon(
+                    imageVector = Icons.Default.QrCodeScanner,
+                    contentDescription = "Simular Leitura de QR Code",
+                    tint = MaterialTheme.colorScheme.onPrimary
+                )
             }
         }
+        // ========================================================
 
-        // ================================================================
-        //  BOTÃO DE SIMULAÇÃO DE QR CODE (GATILHO FALSO)
-        // ================================================================
-        FloatingActionButton(
-            onClick = {
-                // Só simula o scan se não houver um em andamento
-                if (isScanning.value) {
-                    isScanning.value = false // Trava para evitar múltiplos cliques
-                    Toast.makeText(context, "Simulando leitura de QR Code...", Toast.LENGTH_SHORT).show()
-                    // Chama a mesma função que o scanner chamaria
-                    estacionamentoViewModel.fazerCheckIn(context)
-                }
-            },
-            modifier = Modifier
-                .align(Alignment.BottomCenter) // Posiciona o botão na parte inferior central
-                .padding(16.dp)
-        ) {
-            Icon(
-                Icons.Default.QrCodeScanner,
-                contentDescription = "Simular Leitura de QR Code"
+        // Indicador de progresso que aparece no centro da tela
+        if (isLoading) {
+            CircularProgressIndicator(
+                modifier = Modifier.align(Alignment.Center),
+                strokeWidth = 4.dp
             )
         }
     }
+}
+
+// Função de tratamento unificada para evitar repetição de código
+private fun handleScan(
+    barCodeValue: String,
+    scanMode: String,
+    context: Context,
+    navController: NavController,
+    onComplete: () -> Unit
+) {
+    when (scanMode) {
+        "checkin" -> handleCheckIn(barCodeValue, context, navController, onComplete)
+        "checkout" -> handleCheckOut(barCodeValue, context, navController, onComplete)
+        else -> {
+            Toast.makeText(context, "Modo de scanner inválido.", Toast.LENGTH_LONG).show()
+            navController.popBackStack()
+            onComplete()
+        }
+    }
+}
+
+private fun handleCheckIn(
+    barCodeValue: String,
+    context: Context,
+    navController: NavController,
+    onComplete: () -> Unit
+) {
+    if (!barCodeValue.equals("checkin", ignoreCase = true)) {
+        showInvalidQRCodeAndGoBack(context, navController)
+        onComplete()
+        return
+    }
+
+    Toast.makeText(context, "QR Code de Check-in detectado!", Toast.LENGTH_SHORT).show()
+
+    CoroutineScope(Dispatchers.IO).launch {
+        val token = SessionManager.getAuthToken(context)
+        if (token == null) {
+            // Lógica para lidar com token nulo
+            onComplete()
+            return@launch
+        }
+        try {
+            val response = RetrofitClient.api.registrarCheckIn("Bearer $token")
+            CoroutineScope(Dispatchers.Main).launch {
+                if (response.isSuccessful && response.body() != null) {
+                    val checkInResponse = response.body()!!
+                    Toast.makeText(context, "Check-in realizado!", Toast.LENGTH_LONG).show()
+                    navController.navigate("estacionamento_ativo/${checkInResponse.horario_entrada}") {
+                        popUpTo("home") { inclusive = true }
+                    }
+                } else {
+                    val errorMsg = response.errorBody()?.string() ?: "Erro no check-in"
+                    Toast.makeText(context, "Erro: $errorMsg", Toast.LENGTH_LONG).show()
+                    navController.popBackStack()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("CHECKIN_API", "Exceção ao fazer check-in: ${e.message}")
+            CoroutineScope(Dispatchers.Main).launch {
+                Toast.makeText(context, "Falha na conexão.", Toast.LENGTH_LONG).show()
+                navController.popBackStack()
+            }
+        } finally {
+            CoroutineScope(Dispatchers.Main).launch { onComplete() }
+        }
+    }
+}
+
+
+private fun handleCheckOut(
+    barCodeValue: String,
+    context: Context,
+    navController: NavController,
+    onComplete: () -> Unit
+) {
+    if (!barCodeValue.equals("checkout", ignoreCase = true)) {
+        showInvalidQRCodeAndGoBack(context, navController)
+        onComplete()
+        return
+    }
+
+    Toast.makeText(context, "Confirmando pagamento e finalizando sessão...", Toast.LENGTH_SHORT).show()
+
+    CoroutineScope(Dispatchers.IO).launch {
+        val token = SessionManager.getAuthToken(context)
+        if (token == null) {
+            // Lógica para lidar com token nulo
+            CoroutineScope(Dispatchers.Main).launch {
+                Toast.makeText(context, "Sessão expirada. Faça login.", Toast.LENGTH_LONG).show()
+                navController.navigate("login") { popUpTo(0) }
+            }
+            onComplete()
+            return@launch
+        }
+
+        try {
+            // A API simula o pagamento com o cartão cadastrado no backend
+            val response = RetrofitClient.api.registrarCheckout("Bearer $token")
+
+            CoroutineScope(Dispatchers.Main).launch {
+                if (response.isSuccessful && response.body() != null) {
+                    val checkoutResponse = response.body()!!
+                    Toast.makeText(context, "Pagamento de R$ ${String.format("%.2f", checkoutResponse.valor_pago)} efetuado com sucesso!", Toast.LENGTH_LONG).show()
+                    navController.navigate("home") {
+                        popUpTo(navController.graph.startDestinationId) { inclusive = true }
+                    }
+                } else {
+                    val errorMsg = response.errorBody()?.string() ?: "Erro ao fazer checkout"
+                    Toast.makeText(context, "Erro: $errorMsg", Toast.LENGTH_LONG).show()
+                    navController.popBackStack()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("CHECKOUT_API", "Exceção: ${e.message}")
+            CoroutineScope(Dispatchers.Main).launch {
+                Toast.makeText(context, "Falha na conexão com o servidor.", Toast.LENGTH_LONG).show()
+                navController.popBackStack()
+            }
+        } finally {
+            CoroutineScope(Dispatchers.Main).launch { onComplete() }
+        }
+    }
+}
+
+
+private fun showInvalidQRCodeAndGoBack(context: Context, navController: NavController) {
+    Toast.makeText(context, "QR Code inválido.", Toast.LENGTH_LONG).show()
+    navController.popBackStack()
 }
