@@ -1,5 +1,7 @@
 package com.example.myapplication.screens
 
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -10,21 +12,32 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import com.example.myapplication.EstacionamentoViewModel
+import com.example.myapplication.model.DadosSessao
+import com.google.gson.Gson
 import kotlinx.coroutines.delay
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import java.time.Duration
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.math.ceil
 
+@RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TelaEstacionamentoAtivo(
     navController: NavController,
-    horarioEntradaString: String?
+    horarioEntradaString: String?,
+    estacionamentoViewModel: EstacionamentoViewModel
 ) {
     // Defina sua regra de negócio. Ex: R$ 5,00 por hora.
     val tarifaPorHora = 5.0
+
+    val sessaoId by estacionamentoViewModel.sessaoIdAtiva.collectAsStateWithLifecycle()
+    val eventoNavegacao by estacionamentoViewModel.eventoDeNavegacaoResumo.collectAsStateWithLifecycle()
 
     if (horarioEntradaString == null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -68,6 +81,23 @@ fun TelaEstacionamentoAtivo(
         String.format("R$ %.2f", custo)
     }
 
+    // Efeito que observa o evento de navegação
+    LaunchedEffect(eventoNavegacao) {
+        eventoNavegacao?.let { resumoData ->
+            // 1. Serializa o objeto para uma string JSON
+            val resumoDataJson = Gson().toJson(resumoData)
+
+            // IMPORTANTE: Codifica a string JSON para ser segura para URLs
+            val rotaJsonCodificada = URLEncoder.encode(resumoDataJson, StandardCharsets.UTF_8.name())
+
+            // 2. Navega para a tela de resumo com os dados
+            navController.navigate("resumo/$rotaJsonCodificada")
+
+            // 3. Informa ao ViewModel que o evento foi consumido
+            estacionamentoViewModel.onNavegacaoParaResumoFeita()
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(title = { Text("Sessão Ativa") })
@@ -109,12 +139,16 @@ fun TelaEstacionamentoAtivo(
             Spacer(modifier = Modifier.height(64.dp))
 
             Button(
-                onClick = { /* TODO: Implementar navegação para pagamento */ },
+                onClick = {
+                    sessaoId?.let {
+                        estacionamentoViewModel.finalizarSessaoEPreprarPagamento(it)
+                    }
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp)
             ) {
-                Text("PAGAR E FINALIZAR SESSÃO", fontSize = 16.sp)
+                Text("Finalizar e Pagar")
             }
         }
     }

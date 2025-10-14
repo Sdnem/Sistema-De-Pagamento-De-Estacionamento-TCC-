@@ -14,6 +14,7 @@ object SessionManager {
     private const val USER_ID = "user_id"
     // NOVA CONSTANTE para salvar o nome do usuário
     private const val USER_NAME = "user_name"
+    private const val KEY_IS_CHECKED_IN = "is_checked_in" // Nova chave
 
     // Função auxiliar para não repetir código
     private fun getPrefs(context: Context): SharedPreferences {
@@ -46,6 +47,24 @@ object SessionManager {
      */
     fun getUserName(context: Context): String? {
         return getPrefs(context).getString(USER_NAME, null)
+    }
+
+    /**
+     * Salva o status de check-in do usuário.
+     */
+    fun setCheckInStatus(context: Context, isCheckedIn: Boolean) {
+        val editor = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+        editor.putBoolean(KEY_IS_CHECKED_IN, isCheckedIn)
+        editor.apply()
+    }
+
+    /**
+     * Recupera o status de check-in do usuário.
+     * Retorna 'false' como padrão se não houver um status salvo.
+     */
+    fun getCheckInStatus(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getBoolean(KEY_IS_CHECKED_IN, false)
     }
 
     /**

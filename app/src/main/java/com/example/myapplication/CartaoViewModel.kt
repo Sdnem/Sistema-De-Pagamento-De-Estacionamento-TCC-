@@ -1,6 +1,5 @@
 package com.example.myapplication
 
-// CORREÇÃO: Removida a importação duplicada do 'Context'
 import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel

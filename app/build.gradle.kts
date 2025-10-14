@@ -72,6 +72,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.1")
     implementation(libs.play.services.cast.framework)
     implementation("com.google.mlkit:barcode-scanning:17.2.0")
+    implementation(libs.androidx.lifecycle.runtime.compose)
     val cameraxVersion = "1.3.1"
     implementation("androidx.camera:camera-core:$cameraxVersion")
     implementation("androidx.camera:camera-camera2:$cameraxVersion")
