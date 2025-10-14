@@ -12,9 +12,23 @@ object SessionManager {
 
     private const val PREFS_NAME = "MyAppSession"
     private const val USER_ID = "user_id"
+    private const val KEY_AUTH_TOKEN = "auth_token"
     // NOVA CONSTANTE para salvar o nome do usuário
     private const val USER_NAME = "user_name"
     private const val KEY_IS_CHECKED_IN = "is_checked_in" // Nova chave
+
+    fun saveAuthToken(context: Context, token: String) {
+        val editor = getPrefs(context).edit()
+        editor.putString(KEY_AUTH_TOKEN, token)
+        editor.apply()
+    }
+
+    // ==========================================================
+    // NOVA FUNÇÃO PARA RECUPERAR O TOKEN
+    // ==========================================================
+    fun getAuthToken(context: Context): String? {
+        return getPrefs(context).getString(KEY_AUTH_TOKEN, null)
+    }
 
     // Função auxiliar para não repetir código
     private fun getPrefs(context: Context): SharedPreferences {

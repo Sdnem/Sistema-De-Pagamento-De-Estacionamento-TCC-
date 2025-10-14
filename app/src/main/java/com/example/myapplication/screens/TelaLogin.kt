@@ -20,7 +20,6 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.example.myapplication.model.SessionManager
 import com.example.myapplication.remote.RetrofitClient
-import com.google.gson.JsonObject
 import kotlinx.coroutines.launch
 
 @Composable
@@ -87,34 +86,41 @@ fun TelaLogin(navController: NavController) {
                     isLoading = true
                     scope.launch {
                         try {
-                            val loginRequest = JsonObject().apply {
-                                addProperty("email", email)
-                                addProperty("senha", senha)
-                            }
-
-                            val response = RetrofitClient.api.login(loginRequest)
+                            val response = RetrofitClient.api.login(email = email, senha = senha)
 
                             if (response.isSuccessful && response.body() != null) {
-                                val responseBody = response.body()!!
-                                Log.d("LOGIN_SUCCESS", "Login bem-sucedido: $responseBody")
+                                val loginResponse = response.body()!!
 
-                                // ========================================================
-                                // CORREÇÃO: Extrair o ID e também o NOME do usuário
-                                // ========================================================
-                                val usuarioJson = responseBody.getAsJsonObject("usuario")
-                                val userId = usuarioJson.get("id").asInt
-                                // Usamos 'get' para pegar o nome e convertemos para String.
-                                // 'asString' funciona, mas get()?.asString é mais seguro se o nome puder ser nulo.
-                                val userName = usuarioJson.get("nome")?.asString
+                                // Salvar os dados da sessão IMEDIATAMENTE
+                                SessionManager.saveAuthToken(context, loginResponse.access_token)
+                                SessionManager.saveUserData(context, loginResponse.user_id, loginResponse.user_name)
 
-                                // CORREÇÃO: Usar a nova função 'saveUserData' que salva ambos
-                                SessionManager.saveUserData(context, userId, userName)
-
+                                Log.d("LOGIN_SUCCESS", "UserID: ${loginResponse.user_id}, Sessão Ativa: ${loginResponse.active_session_info}")
                                 Toast.makeText(context, "Login bem-sucedido!", Toast.LENGTH_SHORT).show()
-                                navController.navigate("home") {
-                                    // Limpa a pilha de navegação para que o usuário não volte para o login
-                                    popUpTo("login") { inclusive = true }
+
+                                // ========================================================
+                                // LÓGICA DE REDIRECIONAMENTO INTELIGENTE
+                                // ========================================================
+                                // Prioridade 1: Usuário já tem uma sessão de estacionamento ativa?
+                                if (loginResponse.active_session_info != null) {
+                                    navController.navigate("estacionamento_ativo/${loginResponse.active_session_info.horario_entrada}") {
+                                        // Limpa toda a pilha de navegação para que o usuário não volte
+                                        popUpTo(navController.graph.startDestinationId) { inclusive = true }
+                                    }
                                 }
+                                // Prioridade 2: Usuário não tem cartão cadastrado?
+                                else if (loginResponse.card_count == 0) {
+                                    navController.navigate("cadastro_cartao") {
+                                        popUpTo("login") { inclusive = true }
+                                    }
+                                }
+                                // Prioridade 3: Tudo certo, vai para a tela inicial.
+                                else {
+                                    navController.navigate("home") {
+                                        popUpTo("login") { inclusive = true }
+                                    }
+                                }
+                                // ========================================================
 
                             } else {
                                 val errorMsg = response.errorBody()?.string() ?: "Credenciais inválidas"
@@ -123,7 +129,7 @@ fun TelaLogin(navController: NavController) {
                             }
                         } catch (e: Exception) {
                             Log.e("API_LOGIN", "Exceção: ${e.message}")
-                            Toast.makeText(context, "Falha na conexão com o servidor", Toast.LENGTH_LONG).show()
+                            Toast.makeText(context, "Falha na conexão com o servidor.", Toast.LENGTH_LONG).show()
                         } finally {
                             isLoading = false
                         }
@@ -145,7 +151,6 @@ fun TelaLogin(navController: NavController) {
             }
 
             Spacer(modifier = Modifier.height(16.dp))
-            // CORREÇÃO: A rota para cadastro é 'cadastro_usuario', conforme MainActivity.kt
             TextButton(onClick = { navController.navigate("cadastro_usuario") }) {
                 Text("Não tem uma conta? Cadastre-se")
             }
