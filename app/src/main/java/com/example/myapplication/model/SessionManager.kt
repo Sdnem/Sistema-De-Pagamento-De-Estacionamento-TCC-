@@ -3,28 +3,90 @@ package com.example.myapplication.model
 import android.content.Context
 import android.content.SharedPreferences
 
-interface SessionManager {
-    fun saveAuthToken(token: String)
-    fun fetchAuthToken(): String?
-}
+/**
+ * Objeto Singleton para gerenciar a sessão do usuário usando SharedPreferences.
+ * Sendo um 'object', só existe uma instância dele em todo o app e suas funções
+ * podem ser chamadas diretamente (Ex: SessionManager.getUserId(...)).
+ */
+object SessionManager {
 
-// Classe para gerenciar o token do usuário
-class SessionManagerImpl(context: Context) : SessionManager {
-    private var prefs: SharedPreferences =
-        context.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
+    private const val PREFS_NAME = "MyAppSession"
+    private const val USER_ID = "user_id"
+    private const val KEY_AUTH_TOKEN = "auth_token"
+    // NOVA CONSTANTE para salvar o nome do usuário
+    private const val USER_NAME = "user_name"
+    private const val KEY_IS_CHECKED_IN = "is_checked_in" // Nova chave
 
-    companion object {
-        const val AUTH_TOKEN = "auth_token"
-    }
-
-    // A anotação @Override é adicionada para indicar que vem da interface
-    override fun saveAuthToken(token: String) {
-        val editor = prefs.edit()
-        editor.putString(AUTH_TOKEN, token)
+    fun saveAuthToken(context: Context, token: String) {
+        val editor = getPrefs(context).edit()
+        editor.putString(KEY_AUTH_TOKEN, token)
         editor.apply()
     }
 
-    override fun fetchAuthToken(): String? {
-        return prefs.getString(AUTH_TOKEN, null)
+    // ==========================================================
+    // NOVA FUNÇÃO PARA RECUPERAR O TOKEN
+    // ==========================================================
+    fun getAuthToken(context: Context): String? {
+        return getPrefs(context).getString(KEY_AUTH_TOKEN, null)
+    }
+
+    // Função auxiliar para não repetir código
+    private fun getPrefs(context: Context): SharedPreferences {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    }
+
+    /**
+     * Salva os dados do usuário após o login.
+     * MUDANÇA: Agora salva o ID e o NOME.
+     */
+    fun saveUserData(context: Context, userId: Int, userName: String?) {
+        val editor = getPrefs(context).edit()
+        editor.putInt(USER_ID, userId)
+        editor.putString(USER_NAME, userName) // Salva o nome
+        editor.apply()
+    }
+
+    /**
+     * Busca o ID do usuário salvo.
+     * Retorna -1 se não houver ID salvo.
+     */
+    fun getUserId(context: Context): Int {
+        return getPrefs(context).getInt(USER_ID, -1)
+    }
+
+    /**
+     * NOVA FUNÇÃO para buscar o nome do usuário salvo.
+     * Retorna null se não houver nome salvo.
+     * É esta função que a HomeScreen vai chamar.
+     */
+    fun getUserName(context: Context): String? {
+        return getPrefs(context).getString(USER_NAME, null)
+    }
+
+    /**
+     * Salva o status de check-in do usuário.
+     */
+    fun setCheckInStatus(context: Context, isCheckedIn: Boolean) {
+        val editor = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+        editor.putBoolean(KEY_IS_CHECKED_IN, isCheckedIn)
+        editor.apply()
+    }
+
+    /**
+     * Recupera o status de check-in do usuário.
+     * Retorna 'false' como padrão se não houver um status salvo.
+     */
+    fun getCheckInStatus(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getBoolean(KEY_IS_CHECKED_IN, false)
+    }
+
+    /**
+     * Limpa todos os dados da sessão (usado para logout).
+     */
+    fun clearSession(context: Context) {
+        val editor = getPrefs(context).edit()
+        editor.clear()
+        editor.apply()
     }
 }

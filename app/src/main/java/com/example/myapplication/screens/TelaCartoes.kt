@@ -1,166 +1,134 @@
+package com.example.myapplication.screens
+
+import android.annotation.SuppressLint
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
+// CORREÇÃO: Removido o ponto extra na linha de importação
+import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import androidx.navigation.compose.rememberNavController
 import com.example.myapplication.CartaoViewModel
-import com.example.myapplication.CartaoViewModelFactory
-import com.example.myapplication.model.Cartao
-import com.example.myapplication.model.SessionManagerImpl
+import com.example.myapplication.ListaCartoesState
+import com.example.myapplication.remote.CartaoResponse
 
+@OptIn(ExperimentalMaterial3Api::class)
+@SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @Composable
 fun TelaCartoes(
     navController: NavController,
-    // A ViewModel é injetada aqui. O Context é necessário para o SessionManager.
-    viewModel: CartaoViewModel = viewModel(
-        factory = CartaoViewModelFactory(SessionManagerImpl(LocalContext.current))
-    )
+    cartaoViewModel: CartaoViewModel = viewModel() // Injeta o ViewModel
 ) {
-    // Coleta o estado da ViewModel. A UI irá recompor automaticamente quando esses valores mudarem.
-    val cartoes by viewModel.cartoes.collectAsState()
-    val isLoading by viewModel.isLoading
-    val errorMessage by viewModel.errorMessage
+    val context = LocalContext.current
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        Text("Meus Cartões", style = MaterialTheme.typography.headlineMedium)
+    // `LaunchedEffect` é executado uma vez quando a tela é carregada.
+    // Ele dispara a busca pelos cartões no ViewModel.
+    LaunchedEffect(key1 = true) {
+        cartaoViewModel.buscarCartoes(context)
+    }
 
-        Spacer(modifier = Modifier.height(16.dp))
+    // Observa o estado da lista de cartões do ViewModel. A tela será recomposta sempre que o estado mudar.
+    val listaState by cartaoViewModel.listaCartoesState.collectAsState()
 
-        // Se houver uma mensagem de erro, exiba-a
-        errorMessage?.let {
-            Text(it, color = MaterialTheme.colorScheme.error)
-            Spacer(modifier = Modifier.height(8.dp))
-        }
-
-        if (isLoading) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-        } else {
-            LazyColumn(modifier = Modifier.weight(1f)) {
-                items(cartoes, key = { it.id!! }) { cartao -> // Use o id como chave para melhor performance
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        elevation = CardDefaults.cardElevation(4.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text("Nome: ${cartao.nome}")
-                            Text("Número: **** **** **** ${cartao.numero % 10000}")
-                            Text("Banco: ${cartao.banco}")
-
-                            Button(
-                                onClick = {
-                                    // A lógica de remoção agora está na ViewModel.
-                                    // O ID do cartão pode ser nulo ao criar, mas nunca será ao ser listado do BD.
-                                    cartao.id?.let { viewModel.deletarCartao(it) }
-                                },
-                                modifier = Modifier.align(Alignment.End),
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                            ) {
-                                Text("Remover")
-                            }
-                        }
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Meus Cartões") },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.Filled.ArrowBack, contentDescription = "Voltar")
                     }
                 }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Button(
-                onClick = {
-                    navController.navigate("addCartao")
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Adicionar Cartão")
+            )
+        },
+        floatingActionButton = {
+            FloatingActionButton(onClick = { navController.navigate("cadastro_cartao") }) {
+                Icon(Icons.Default.Add, contentDescription = "Adicionar Cartão")
             }
         }
-    }
-}
+    ) { paddingValues ->
 
-@Preview(showBackground = true, name = "Tela de Cartões - Estado Vazio")
-@Composable
-fun TelaCartoesPreview_EstadoVazio() {
-    MaterialTheme {
-        // A chamada padrão para a tela já resulta no estado vazio,
-        // pois o ViewModel da preview não tem acesso ao banco de dados.
-        TelaCartoes(navController = rememberNavController())
-    }
-}
-
-/**
- * Preview 2: Tela com uma lista de cartões já cadastrados.
- * Para isso, recriamos a UI da tela e fornecemos uma lista de dados falsos (mock data),
- * permitindo visualizar como os itens do LazyColumn serão renderizados.
- */
-@Preview(showBackground = true, name = "Tela de Cartões - Com Lista")
-@Composable
-fun TelaCartoesPreview_ComListaDeCartoes() {
-    // Lista de dados falsos para a preview
-    val listaDeCartoesFalsos = listOf(
-        Cartao(id = 1, nome = "J. SILVA", numero = 1111222233334444L, banco = "Banco Digital", validade = 2025, cvc = 123, userId = 1),
-        Cartao(id = 2, nome = "M. PEREIRA", numero = 5555666677778888L, banco = "Banco Vermelho", validade = 2028, cvc = 321, userId = 2),
-        Cartao(id = 3, nome = "A. COSTA", numero = 9999888877776666L, banco = "Caixa", validade = 2030, cvc = 987, userId = 3)
-    )
-
-    MaterialTheme {
-        // Recriamos a estrutura da "TelaCartoes" aqui para poder injetar os dados falsos.
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp)
-        ) {
-            Text("Meus Cartões", style = MaterialTheme.typography.headlineMedium)
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Usamos a lista de dados falsos no LazyColumn
-            LazyColumn(modifier = Modifier.weight(1f)) {
-                items(listaDeCartoesFalsos, key = { it.id!! }) { cartao ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    elevation = CardDefaults.cardElevation(4.dp)
+        // O `when` decide o que mostrar na tela com base no estado atual
+        when (val state = listaState) {
+            is ListaCartoesState.Loading -> {
+                // Mostra um indicador de carregamento no centro
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            }
+            is ListaCartoesState.Error -> {
+                // Mostra a mensagem de erro no centro
+                Box(
+                    modifier = Modifier.fillMaxSize().padding(paddingValues).padding(16.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Nome: ${cartao.nome}")
-                        Text("Número: **** **** **** ${cartao.numero % 10000}")
-                        Text("Banco: ${cartao.banco}")
-
-                        Button(
-                            onClick = { /* Ação de remover na preview não faz nada */ },
-                            modifier = Modifier.align(Alignment.End),
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error) // [cite: 65]
-                        ) {
-                            Text("Remover")
+                    Text(text = "Erro ao carregar cartões.\n${state.message}", textAlign = TextAlign.Center)
+                }
+            }
+            is ListaCartoesState.Success -> {
+                if (state.cartoes.isEmpty()) {
+                    // Se a lista de sucesso estiver vazia, mostra uma mensagem amigável
+                    Box(
+                        modifier = Modifier.fillMaxSize().padding(paddingValues).padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("Você ainda não possui cartões cadastrados.", textAlign = TextAlign.Center)
+                    }
+                } else {
+                    // Se a lista tiver itens, usa uma LazyColumn para exibi-los
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(paddingValues)
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(state.cartoes) { cartao ->
+                            CartaoItem(cartao = cartao)
                         }
                     }
                 }
             }
-            }
+        }
+    }
+}
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Button(
-                onClick = { /* Ação de adicionar na preview não faz nada */ },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Adicionar Cartão")
+// Composable reutilizável para exibir um único cartão na lista
+@Composable
+fun CartaoItem(cartao: CartaoResponse) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                // Garante que a chamada está correta
+                imageVector = Icons.Filled.CreditCard,
+                contentDescription = "Ícone de Cartão",
+                modifier = Modifier.size(40.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = cartao.nome, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(text = cartao.numero, style = MaterialTheme.typography.bodyMedium)
+                Text(text = "Validade: ${cartao.validade}", style = MaterialTheme.typography.bodySmall)
             }
         }
     }

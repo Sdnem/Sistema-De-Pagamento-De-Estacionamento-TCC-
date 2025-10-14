@@ -1,126 +1,57 @@
 package com.example.myapplication
 
-import androidx.compose.runtime.mutableStateOf
+import android.content.Context
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.myapplication.model.Cartao
 import com.example.myapplication.model.SessionManager
+import com.example.myapplication.remote.CartaoResponse
 import com.example.myapplication.remote.RetrofitClient
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.HttpException
-import retrofit2.Response
-import java.io.IOException
 
-class CartaoViewModel(private val sessionManager: SessionManager) : ViewModel() {
+// Define os possíveis estados da tela
+sealed class ListaCartoesState {
+    object Loading : ListaCartoesState()
+    data class Success(val cartoes: List<CartaoResponse>) : ListaCartoesState()
+    data class Error(val message: String) : ListaCartoesState()
+}
 
-    private val _cartoes = MutableStateFlow<List<Cartao>>(emptyList())
-    val cartoes: StateFlow<List<Cartao>> = _cartoes
+class CartaoViewModel : ViewModel() {
 
-    val isLoading = mutableStateOf(false)
-    val errorMessage = mutableStateOf<String?>(null)
+    private val _listaCartoesState = MutableStateFlow<ListaCartoesState>(ListaCartoesState.Loading)
+    val listaCartoesState = _listaCartoesState.asStateFlow()
 
-    // ✅ NOVO: Usando SharedFlow para eventos de canal único
-    private val _cadastroEvent = MutableSharedFlow<Unit>()
-    val cadastroEvent = _cadastroEvent.asSharedFlow()
-
-    init {
-        buscarCartoesDoUsuario()
-    }
-
-    fun buscarCartoesDoUsuario() {
-        val token = sessionManager.fetchAuthToken()
-        if (token == null) {
-            errorMessage.value = "Usuário não autenticado."
-            return
-        }
-        isLoading.value = true
-        errorMessage.value = null
-        RetrofitClient.getInstanceCartao(token).getCartoes().enqueue(object : Callback<List<Cartao>> {
-            override fun onResponse(call: Call<List<Cartao>>, response: Response<List<Cartao>>) {
-                if (response.isSuccessful) {
-                    _cartoes.value = response.body() ?: emptyList()
-                } else {
-                    errorMessage.value = "Erro ao buscar cartões."
-                }
-                isLoading.value = false
-            }
-
-            override fun onFailure(call: Call<List<Cartao>>, t: Throwable) {
-                errorMessage.value = "Falha na conexão: ${t.message}"
-                isLoading.value = false
-            }
-        })
-    }
-
-    fun addCartao(novoCartao: Cartao) {
-        val token = sessionManager.fetchAuthToken()
-        if (token == null) {
-            errorMessage.value = "Sessão expirada. Faça login novamente."
-            return
-        }
-
-        // Inicia a corrotina no escopo do ViewModel
+    fun buscarCartoes(context: Context) {
         viewModelScope.launch {
-            isLoading.value = true
-            errorMessage.value = null
+            _listaCartoesState.value = ListaCartoesState.Loading
+
+            // 1. Pega o token salvo no SessionManager
+            val token = SessionManager.getAuthToken(context)
+            if (token == null) {
+                _listaCartoesState.value = ListaCartoesState.Error("Usuário não autenticado.")
+                return@launch
+            }
 
             try {
-                // 1. A chamada de rede agora é direta. O 'await' é implícito em funções suspend.
-                val cartaoAdicionado = RetrofitClient.getInstanceCartao(token).addCartao(novoCartao)
+                // 2. Chama a nova função da API, passando o token no Header
+                val response = RetrofitClient.api.getMeusCartoes("Bearer $token")
 
-                // 2. O código que estava no 'onResponse' bem-sucedido vem aqui.
-                val listaAtual = _cartoes.value?.toMutableList() ?: mutableListOf()
-                listaAtual.add(cartaoAdicionado)
-                _cartoes.value = listaAtual
-
-                // Emitindo o evento de sucesso
-                _cadastroEvent.emit(Unit)
-
-            } catch (e: HttpException) {
-                // 3. Trata erros de resposta do servidor (ex: 404, 500, etc.)
-                // Equivale à parte 'else' do onResponse.
-                errorMessage.value = "Erro ao adicionar o cartão."
-
-            } catch (e: IOException) {
-                // 4. Trata erros de conexão (sem internet, timeout, etc.)
-                // Equivale ao onFailure.
-                errorMessage.value = "Falha na conexão: ${e.message}"
-
-            } finally {
-                // 5. O bloco 'finally' garante que o loading sempre será finalizado,
-                // não importa se a chamada deu sucesso ou falhou.
-                isLoading.value = false
-            }
-        }
-    }
-
-    fun deletarCartao(cartaoId: Int) {
-        val token = sessionManager.fetchAuthToken()
-        if (token == null) {
-            errorMessage.value = "Sessão expirada. Faça login novamente."
-            return
-        }
-        RetrofitClient.getInstanceCartao(token).deleteCartao(cartaoId).enqueue(object : Callback<Void> {
-            override fun onResponse(call: Call<Void>, response: Response<Void>) {
                 if (response.isSuccessful) {
-                    val listaAtualizada = _cartoes.value.toMutableList()
-                    listaAtualizada.removeAll { it.id == cartaoId }
-                    _cartoes.value = listaAtualizada
+                    // 3. Em caso de sucesso, atualiza o estado com a lista de cartões
+                    _listaCartoesState.value = ListaCartoesState.Success(response.body() ?: emptyList())
                 } else {
-                    errorMessage.value = "Não foi possível remover o cartão."
+                    // 4. Se a resposta não for 2xx, trata como erro (incluindo 404)
+                    val errorMsg = response.errorBody()?.string() ?: "Erro desconhecido"
+                    Log.e("BUSCAR_CARTOES", "Erro ${response.code()}: $errorMsg")
+                    _listaCartoesState.value = ListaCartoesState.Error(errorMsg)
                 }
+            } catch (e: Exception) {
+                // 5. Trata erros de conexão
+                Log.e("BUSCAR_CARTOES", "Exceção: ${e.message}")
+                _listaCartoesState.value = ListaCartoesState.Error("Falha na conexão com o servidor.")
             }
-
-            override fun onFailure(call: Call<Void>, t: Throwable) {
-                errorMessage.value = "Falha na conexão: ${t.message}"
-            }
-        })
+        }
     }
 }

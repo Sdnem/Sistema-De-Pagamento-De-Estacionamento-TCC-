@@ -1,5 +1,7 @@
 package com.example.myapplication.screens
 
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -53,23 +55,18 @@ fun TelaResumoPagamento(
                 .fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Seção 1: Detalhes do Veículo
-            CartaoDetalhes(titulo = "Seu Veículo") {
-                InfoLinha(label = "Placa", valor = resumoData.placaVeiculo)
-                InfoLinha(label = "Modelo", valor = resumoData.modeloVeiculo)
-            }
 
             // Seção 2: Detalhes do Estacionamento
             CartaoDetalhes(titulo = "Período Utilizado") {
-                InfoLinha(label = "Entrada", valor = resumoData.entrada)
-                InfoLinha(label = "Saída", valor = resumoData.saida)
+                InfoLinha(label = "Entrada", valor = resumoData.entrada.toString())
+                InfoLinha(label = "Saída", valor = resumoData.saida.toString())
                 Divider(modifier = Modifier.padding(vertical = 8.dp))
                 InfoLinha(label = "Tempo Total", valor = resumoData.tempoTotal, isValorDestaque = true)
             }
 
             // Seção 3: Detalhes do Pagamento
             CartaoDetalhes(titulo = "Resumo Financeiro") {
-                InfoLinha(label = "Método", valor = "") // Deixado em branco para o ícone
+                InfoLinha(label = "Cartao", valor = "") // Deixado em branco para o ícone
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         Icons.Default.CreditCard,
@@ -79,7 +76,7 @@ fun TelaResumoPagamento(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "${resumoData.metodoPagamento} final ${resumoData.finalCartao}",
+                        text = "final ${resumoData.finalCartao}",
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -143,13 +140,12 @@ fun InfoLinha(label: String, valor: String, isValorDestaque: Boolean = false) {
 @Composable
 fun TelaResumoPagamentoPreview() {
     val dadosExemplo = ResumoPagamentoData(
-        placaVeiculo = "BRA2E19",
-        modeloVeiculo = "Honda Civic",
+        sessaoId = 123,
+        cartaoId = 456,
         entrada = "07/10/2025 14:30",
         saida = "07/10/2025 16:45",
         tempoTotal = "2h 15min",
         valorTotal = "R$ 12,00",
-        metodoPagamento = "Crédito",
         finalCartao = "1234"
     )
     // Para o preview, o MaterialTheme é necessário

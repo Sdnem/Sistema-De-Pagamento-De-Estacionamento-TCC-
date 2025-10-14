@@ -1,106 +1,159 @@
 package com.example.myapplication.screens
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.unit.dp
 import android.util.Log
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
-import com.example.myapplication.model.Usuario
-import com.example.myapplication.remote.RetrofitInstance
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
-import androidx.compose.ui.Alignment
+import com.example.myapplication.model.SessionManager
+import com.example.myapplication.remote.RetrofitClient
+import kotlinx.coroutines.launch
 
 @Composable
 fun TelaLogin(navController: NavController) {
     var email by remember { mutableStateOf("") }
     var senha by remember { mutableStateOf("") }
-    var mensagem by remember { mutableStateOf("") }
+    var isLoading by remember { mutableStateOf(false) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally // Alinha o conteúdo no centro
-    ) {
-        TextField(
-            value = email,
-            onValueChange = { email = it },
-            label = { Text("Email") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(modifier = Modifier.height(8.dp))
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
-        TextField(
-            value = senha,
-            onValueChange = { senha = it },
-            label = { Text("Senha") },
-            visualTransformation = PasswordVisualTransformation(),
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(modifier = Modifier.height(16.dp))
+    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(32.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "Bem-vindo!",
+                style = MaterialTheme.typography.headlineLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = "Faça login para continuar",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
 
-        Button(
-            onClick = {
-                val usuario = Usuario(nome = "", email = email, senha = senha)
+            Spacer(modifier = Modifier.height(48.dp))
 
-                RetrofitInstance.api.login(usuario).enqueue(object : Callback<Map<String, String>> {
-                    override fun onResponse(
-                        call: Call<Map<String, String>>,
-                        response: Response<Map<String, String>>
-                    ) {
-                        if (response.isSuccessful && response.body()?.get("status") == "sucesso") {
-                            navController.navigate("telaPrincipal")
-                        } else {
-                            mensagem = "Credenciais inválidas"
+            OutlinedTextField(
+                value = email,
+                onValueChange = { email = it },
+                label = { Text("Email") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Email,
+                    imeAction = ImeAction.Next
+                )
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+
+            OutlinedTextField(
+                value = senha,
+                onValueChange = { senha = it },
+                label = { Text("Senha") },
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Password,
+                    imeAction = ImeAction.Done
+                )
+            )
+            Spacer(modifier = Modifier.height(32.dp))
+
+            Button(
+                onClick = {
+                    if (isLoading) return@Button
+
+                    isLoading = true
+                    scope.launch {
+                        try {
+                            val response = RetrofitClient.api.login(email = email, senha = senha)
+
+                            if (response.isSuccessful && response.body() != null) {
+                                val loginResponse = response.body()!!
+
+                                // Salvar os dados da sessão IMEDIATAMENTE
+                                SessionManager.saveAuthToken(context, loginResponse.access_token)
+                                SessionManager.saveUserData(context, loginResponse.user_id, loginResponse.user_name)
+
+                                Log.d("LOGIN_SUCCESS", "UserID: ${loginResponse.user_id}, Sessão Ativa: ${loginResponse.active_session_info}")
+                                Toast.makeText(context, "Login bem-sucedido!", Toast.LENGTH_SHORT).show()
+
+                                // ========================================================
+                                // LÓGICA DE REDIRECIONAMENTO INTELIGENTE
+                                // ========================================================
+                                // Prioridade 1: Usuário já tem uma sessão de estacionamento ativa?
+                                if (loginResponse.active_session_info != null) {
+                                    navController.navigate("estacionamento_ativo/${loginResponse.active_session_info.horario_entrada}") {
+                                        // Limpa toda a pilha de navegação para que o usuário não volte
+                                        popUpTo(navController.graph.startDestinationId) { inclusive = true }
+                                    }
+                                }
+                                // Prioridade 2: Usuário não tem cartão cadastrado?
+                                else if (loginResponse.card_count == 0) {
+                                    navController.navigate("cadastro_cartao") {
+                                        popUpTo("login") { inclusive = true }
+                                    }
+                                }
+                                // Prioridade 3: Tudo certo, vai para a tela inicial.
+                                else {
+                                    navController.navigate("home") {
+                                        popUpTo("login") { inclusive = true }
+                                    }
+                                }
+                                // ========================================================
+
+                            } else {
+                                val errorMsg = response.errorBody()?.string() ?: "Credenciais inválidas"
+                                Log.e("LOGIN_FAIL", "Erro: $errorMsg")
+                                Toast.makeText(context, "Credenciais inválidas", Toast.LENGTH_LONG).show()
+                            }
+                        } catch (e: Exception) {
+                            Log.e("API_LOGIN", "Exceção: ${e.message}")
+                            Toast.makeText(context, "Falha na conexão com o servidor.", Toast.LENGTH_LONG).show()
+                        } finally {
+                            isLoading = false
                         }
                     }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp),
+                enabled = !isLoading
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                } else {
+                    Text("Entrar", style = MaterialTheme.typography.titleMedium)
+                }
+            }
 
-                    override fun onFailure(call: Call<Map<String, String>>, t: Throwable) {
-                        Log.e("API", "Erro: ${t.message}")
-                        mensagem = "Erro de conexão"
-                    }
-                })
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Entrar")
-        }
-
-        // --- BOTÃO DE RECUPERAÇÃO DE SENHA ADICIONADO AQUI ---
-        TextButton(
-            onClick = {
-                // Navega para a nova tela de recuperação de senha
-                navController.navigate("telaRecuperacaoSenha")
-            },
-            modifier = Modifier.align(Alignment.CenterHorizontally)
-        ) {
-            Text("Esqueceu a senha?")
-        }
-        // --------------------------------------------------------
-
-        Spacer(modifier = Modifier.height(8.dp))
-        // Mostra a mensagem de erro se ela não estiver vazia
-        if (mensagem.isNotEmpty()) {
-            Text(mensagem, color = MaterialTheme.colorScheme.error)
+            Spacer(modifier = Modifier.height(16.dp))
+            TextButton(onClick = { navController.navigate("cadastro_usuario") }) {
+                Text("Não tem uma conta? Cadastre-se")
+            }
         }
     }
 }

@@ -15,7 +15,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.example.myapplication.model.HistoricoDePagamento
+
+// 1. Modelo de Dados para cada item do histórico
+data class HistoricoDePagamento(
+    val id: String,
+    val data: String,
+    val placaVeiculo: String,
+    val valor: String,
+    val status: String
+)
 
 // 2. A tela principal (Composable)
 @OptIn(ExperimentalMaterial3Api::class)
