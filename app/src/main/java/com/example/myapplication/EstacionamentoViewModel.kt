@@ -3,128 +3,84 @@ package com.example.myapplication
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.myapplication.model.ResumoPagamentoData
 import com.example.myapplication.model.SessionManager
-import com.example.myapplication.remote.CheckInResponse
 import com.example.myapplication.remote.RetrofitClient
-import com.example.myapplication.PagamentoRepository
-import com.google.gson.JsonObject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-// Define os possíveis estados da operação de Check-in
-sealed class CheckInState {
-    object Idle : CheckInState() // Estado inicial ou após reset
-    object Loading : CheckInState() // Operação em andamento
-    data class Success(val response: CheckInResponse) : CheckInState() // Sucesso
-    data class Error(val message: String) : CheckInState() // Falha
-}
+/**
+ * ViewModel responsável por gerenciar o estado da sessão de estacionamento.
+ *
+ * Sua principal responsabilidade é verificar proativamente se já existe
+ * uma sessão ativa no backend quando o app é iniciado ou quando a HomeScreen
+ * é carregada.
+ */
+class EstacionamentoViewModel : ViewModel() {
 
-class EstacionamentoViewModel(
-    private val pagamentoRepository: PagamentoRepository
-) : ViewModel() {
+    // Armazena a informação da sessão ativa (o horário de entrada).
+    // O valor é nulo se não houver sessão ativa.
+    // É "privado" para ser modificado apenas dentro do ViewModel.
+    private val _activeSessionInfo = MutableStateFlow<String?>(null)
 
-    private val _checkInState = MutableStateFlow<CheckInState>(CheckInState.Idle)
-    val checkInState: StateFlow<CheckInState> = _checkInState
-
-    // Novo StateFlow para o status de check-in ativo
-    private val _isCheckInActive = MutableStateFlow(false)
-    val isCheckInActive: StateFlow<Boolean> = _isCheckInActive.asStateFlow()
+    // É "público" e imutável para a UI (HomeScreen) apenas observar.
+    val activeSessionInfo: StateFlow<String?> = _activeSessionInfo
 
     /**
-     * Verifica o status de check-in inicial ao criar a ViewModel.
+     * Verifica ativamente no servidor se o usuário logado possui uma sessão de estacionamento.
+     * Esta função deve ser chamada pela HomeScreen sempre que ela for carregada.
      */
-    fun verificarStatusCheckIn(context: Context) {
-        _isCheckInActive.value = SessionManager.getCheckInStatus(context)
-    }
-
-    /**
-     * Inicia o processo de check-in, comunicando-se com a API.
-     */
-    fun fazerCheckIn(context: Context) {
-        val userId = SessionManager.getUserId(context)
-        if (userId == -1) {
-            _checkInState.value = CheckInState.Error("Usuário não autenticado.")
+    fun checkForActiveSession(context: Context) {
+        // Evita chamadas repetidas se já estivermos cientes de uma sessão.
+        if (_activeSessionInfo.value != null) {
             return
         }
 
         viewModelScope.launch {
-            _checkInState.value = CheckInState.Loading
+            // Primeiro, precisamos do token de autenticação para fazer a chamada.
+            val token = SessionManager.getAuthToken(context)
+            if (token == null) {
+                // Se não há token, não pode haver sessão. Garante que o estado está limpo.
+                _activeSessionInfo.value = null
+                return@launch
+            }
+
             try {
-                val requestBody = JsonObject().apply {
-                    addProperty("usuario_id", userId)
-                }
-                val response = RetrofitClient.api.registrarCheckIn(requestBody)
+                // Usa a rota GET /sessoes/status para verificar o estado no backend.
+                val response = RetrofitClient.api.verificarSessaoAtiva("Bearer $token")
 
                 if (response.isSuccessful && response.body() != null) {
-                    _checkInState.value = CheckInState.Success(response.body()!!)
-
-                    // AQUI: Salva o estado de check-in como ativo!
-                    SessionManager.setCheckInStatus(context, true)
+                    // SUCESSO! Uma sessão ativa foi encontrada.
+                    // Armazena o horário de entrada no nosso StateFlow.
+                    _activeSessionInfo.value = response.body()!!.horario_entrada
                 } else {
-                    val errorBody = response.errorBody()?.string() ?: "Erro desconhecido"
-                    _checkInState.value = CheckInState.Error(errorBody)
+                    // Se a resposta não foi bem-sucedida (ex: 404 Not Found),
+                    // significa que não há sessão ativa. Limpa o estado.
+                    _activeSessionInfo.value = null
                 }
             } catch (e: Exception) {
-                _checkInState.value = CheckInState.Error("Falha na conexão: ${e.message}")
+                // Em caso de erro de rede, assume que não há sessão e limpa o estado.
+                // Poderíamos adicionar um estado de erro para a UI aqui se quiséssemos.
+                _activeSessionInfo.value = null
             }
         }
-    }
-
-    // 1. Crie um StateFlow para controlar o evento de navegação
-    private val _navigateToResumo = MutableStateFlow<ResumoPagamentoData?>(null)
-    val navigateToResumo: StateFlow<ResumoPagamentoData?> = _navigateToResumo.asStateFlow()
-
-    // Estados para a UI (Boas práticas)
-    private val _isLoading = MutableStateFlow<Boolean>(false)
-    val isLoading: StateFlow<Boolean> = _isLoading
-
-    private val _error = MutableStateFlow<String?>(null)
-    val error: StateFlow<String?> = _error
-
-    // NOVO: StateFlow para armazenar o ID da sessão ativa
-    private val _sessaoIdAtiva = MutableStateFlow<Int?>(null)
-    val sessaoIdAtiva: StateFlow<Int?> = _sessaoIdAtiva
-
-    // NOVO: StateFlow para sinalizar que a navegação para o resumo deve ocorrer
-    private val _eventoDeNavegacaoResumo = MutableStateFlow<ResumoPagamentoData?>(null)
-    val eventoDeNavegacaoResumo: StateFlow<ResumoPagamentoData?> = _eventoDeNavegacaoResumo
-
-    fun finalizarSessaoEPreprarPagamento(sessaoId: Int) {
-        viewModelScope.launch {
-            _isLoading.value = true
-            val dadosDaSessao = pagamentoRepository.finalizarSessao(sessaoId)
-            if (dadosDaSessao != null) {
-                // SUCESSO: Emite os dados para o StateFlow
-                _eventoDeNavegacaoResumo.value = dadosDaSessao
-            } else {
-                _error.value = "Falha ao obter dados da sessão."
-            }
-            _isLoading.value = false
-        }
-    }
-
-    // Função para a UI chamar depois que a navegação for tratada
-    fun onNavegacaoParaResumoFeita() {
-        _eventoDeNavegacaoResumo.value = null
-    }
-
-    // Função para a UI "consumir" o evento de erro e limpar o estado
-    fun onErrorShown() {
-        _error.value = null
-    }
-
-    // Função para a UI "consumir" o evento de navegação e limpar o estado
-    fun onNavigationDone() {
-        _navigateToResumo.value = null
     }
 
     /**
-     * Reseta o estado para Idle, permitindo uma nova operação.
+     * Limpa o estado da sessão ativa.
+     * Deve ser chamado ao iniciar o processo de checkout na TelaEstacionamento
+     * para prevenir que a HomeScreen navegue de volta para a sessão que está sendo encerrada.
      */
-    fun resetState() {
-        _checkInState.value = CheckInState.Idle
+    fun clearActiveSession() {
+        _activeSessionInfo.value = null
+    }
+
+    /**
+     * Função para a UI "consumir" o evento de navegação e limpar o estado.
+     * Isso evita que a navegação para a TelaEstacionamento ocorra novamente
+     * se a HomeScreen for recomposta por algum motivo.
+     */
+    fun onNavigationHandled() {
+        _activeSessionInfo.value = null
     }
 }

@@ -63,15 +63,11 @@ fun CameraScreen(
             }
         )
 
-        // ========================================================
-        // BOTÃO DE SIMULAÇÃO UNIFICADO
-        // ========================================================
-        // Aparece em ambos os modos, desde que não esteja carregando
+        // Botão de simulação
         if (!isLoading) {
             FloatingActionButton(
                 onClick = {
                     isLoading = true
-                    // Simula a leitura do QR Code correspondente ao modo atual
                     val simulatedQrValue = if (scanMode == "checkout") "checkout" else "checkin"
                     handleScan(simulatedQrValue, scanMode, context, navController) {
                         isLoading = false
@@ -89,9 +85,8 @@ fun CameraScreen(
                 )
             }
         }
-        // ========================================================
 
-        // Indicador de progresso que aparece no centro da tela
+        // Indicador de progresso
         if (isLoading) {
             CircularProgressIndicator(
                 modifier = Modifier.align(Alignment.Center),
@@ -101,7 +96,7 @@ fun CameraScreen(
     }
 }
 
-// Função de tratamento unificada para evitar repetição de código
+// Função de tratamento unificada
 private fun handleScan(
     barCodeValue: String,
     scanMode: String,
@@ -137,12 +132,22 @@ private fun handleCheckIn(
     CoroutineScope(Dispatchers.IO).launch {
         val token = SessionManager.getAuthToken(context)
         if (token == null) {
-            // Lógica para lidar com token nulo
             onComplete()
             return@launch
         }
         try {
-            val response = RetrofitClient.api.registrarCheckIn("Bearer $token")
+            // ========================================================
+            //              CORREÇÃO APLICADA AQUI
+            // ========================================================
+            // Cria o corpo JSON que a API agora espera.
+            val checkInJson = com.google.gson.JsonObject().apply {
+                addProperty("cancela_id", barCodeValue)
+            }
+
+            // Passa o token e o corpo JSON para a chamada da API.
+            val response = RetrofitClient.api.registrarCheckIn("Bearer $token", checkInJson)
+            // ========================================================
+
             CoroutineScope(Dispatchers.Main).launch {
                 if (response.isSuccessful && response.body() != null) {
                     val checkInResponse = response.body()!!
@@ -186,7 +191,6 @@ private fun handleCheckOut(
     CoroutineScope(Dispatchers.IO).launch {
         val token = SessionManager.getAuthToken(context)
         if (token == null) {
-            // Lógica para lidar com token nulo
             CoroutineScope(Dispatchers.Main).launch {
                 Toast.makeText(context, "Sessão expirada. Faça login.", Toast.LENGTH_LONG).show()
                 navController.navigate("login") { popUpTo(0) }
@@ -196,7 +200,6 @@ private fun handleCheckOut(
         }
 
         try {
-            // A API simula o pagamento com o cartão cadastrado no backend
             val response = RetrofitClient.api.registrarCheckout("Bearer $token")
 
             CoroutineScope(Dispatchers.Main).launch {
