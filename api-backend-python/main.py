@@ -1,4 +1,4 @@
-# main.py - VERSÃO FINAL E CORRIGIDA
+# main.py - VERSÃO PARA PRODUÇÃO (RENDER/PLANETSCALE)
 
 from fastapi import FastAPI, HTTPException, status, Depends
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -8,9 +8,16 @@ from typing import Optional, List
 from datetime import datetime, timedelta
 from passlib.context import CryptContext
 from jose import JWTError, jwt
+import os # <<< ADICIONADO: Para ler variáveis de ambiente
 
 # --- 1. CONFIGURAÇÕES DE SEGURANÇA ---
-SECRET_KEY = "sua-chave-secreta-muito-forte-e-dificil-de-adivinhar"
+
+# <<< ALTERADO: Lê a chave secreta do ambiente.
+# Você NUNCA deve deixar chaves secretas no código.
+SECRET_KEY = os.environ.get("SECRET_KEY")
+if SECRET_KEY is None:
+    raise RuntimeError("Variável de ambiente 'SECRET_KEY' não definida.")
+
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # Token válido por 1 dia
 
@@ -59,14 +66,34 @@ class CartaoPublic(BaseModel):
     bandeira: str
 
 # --- 3. GERENCIAMENTO DE CONEXÃO COM O BANCO ---
+
+# <<< ALTERADO: Esta função agora lê as credenciais do banco
+# a partir das variáveis de ambiente injetadas pelo Render.
 def get_db():
     db = None
+    
+    # Lê as credenciais do ambiente
+    DB_HOST = os.environ.get("DB_HOST")
+    DB_USER = os.environ.get("DB_USER")
+    DB_PASSWORD = os.environ.get("DB_PASSWORD")
+    DB_NAME = os.environ.get("DB_NAME")
+
+    # Garante que todas as variáveis foram configuradas no Render
+    if not all([DB_HOST, DB_USER, DB_PASSWORD, DB_NAME]):
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail="Variáveis de ambiente do banco de dados não configuradas."
+        )
+
     try:
         db = mysql.connector.connect(
-            host="127.0.0.1",
-            user="root",
-            password="unip123", # Sua senha
-            database="TccBd"
+            host=DB_HOST,
+            user=DB_USER,
+            password=DB_PASSWORD,
+            database=DB_NAME,
+            # <<< ADICIONADO: Essencial para conectar com o PlanetScale
+            # Isso força o uso de SSL e verifica o certificado do servidor.
+            ssl_verify_cert=True 
         )
         yield db
     except mysql.connector.Error as err:
@@ -115,6 +142,7 @@ async def get_current_user_id(token: str = Depends(oauth2_scheme)) -> int:
         raise credentials_exception
 
 # --- 5. ROTAS DA API ---
+# (Nenhuma alteração necessária nas rotas)
 
 # --- ROTAS DE USUÁRIOS E CARTÕES (sem alterações) ---
 @app.post("/usuarios/cadastrar", status_code=status.HTTP_201_CREATED, summary="Registra um novo usuário")
