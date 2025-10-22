@@ -92,8 +92,9 @@ def get_db():
             user=DB_USER,
             password=DB_PASSWORD,
             database=DB_NAME,
-            port=int(DB_PORT), # <<< ADICIONADO (e convertido para int)
-            ssl_ca="/etc/secrets/tidb_ca.pem" 
+            port=int(DB_PORT),
+            ssl_ca="/etc/secrets/tidb_ca.pem",
+            ssl_verify_cert=True  # <<< ADICIONE ESTA LINHA
         )
         yield db
     except mysql.connector.Error as err:
