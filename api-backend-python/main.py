@@ -67,19 +67,20 @@ class CartaoPublic(BaseModel):
 
 # --- 3. GERENCIAMENTO DE CONEXÃO COM O BANCO ---
 
-# <<< ALTERADO: Esta função agora lê as credenciais do banco
-# a partir das variáveis de ambiente injetadas pelo Render.
+# <<< ALTERADO: Esta função agora lê a PORTA do banco
+# a partir das variáveis de ambiente.
 def get_db():
     db = None
     
     # Lê as credenciais do ambiente
-    DB_HOST = os.environ.get("DB_HOST")
-    DB_USER = os.environ.get("DB_USER")
-    DB_PASSWORD = os.environ.get("DB_PASSWORD")
-    DB_NAME = os.environ.get("DB_NAME")
+    DB_HOST = os.environ.get("gateway01.us-east-1.prod.aws.tidbcloud.com")
+    DB_USER = os.environ.get("4RCRqCyqHXiqv75.root")
+    DB_PASSWORD = os.environ.get("vsrNS30Kix88qHvV")
+    DB_NAME = os.environ.get("test")
+    DB_PORT = os.environ.get("4000") # <<< ADICIONADO
 
     # Garante que todas as variáveis foram configuradas no Render
-    if not all([DB_HOST, DB_USER, DB_PASSWORD, DB_NAME]):
+    if not all([DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, DB_PORT]): # <<< ALTERADO
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
             detail="Variáveis de ambiente do banco de dados não configuradas."
@@ -91,8 +92,7 @@ def get_db():
             user=DB_USER,
             password=DB_PASSWORD,
             database=DB_NAME,
-            # <<< ADICIONADO: Essencial para conectar com o PlanetScale
-            # Isso força o uso de SSL e verifica o certificado do servidor.
+            port=int(DB_PORT), # <<< ADICIONADO (e convertido para int)
             ssl_verify_cert=True 
         )
         yield db
