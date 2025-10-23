@@ -1,4 +1,4 @@
-# main.py - VERSÃO PARA PRODUÇÃO (RENDER/PLANETSCALE)
+# main.py - VERSÃO HÍBRIDA (Funciona no PC e na Nuvem)
 
 from fastapi import FastAPI, HTTPException, status, Depends
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -8,18 +8,22 @@ from typing import Optional, List
 from datetime import datetime, timedelta
 from passlib.context import CryptContext
 from jose import JWTError, jwt
-import os # <<< ADICIONADO: Para ler variáveis de ambiente
+import os
+from dotenv import load_dotenv
+
+# Carrega as variáveis do arquivo .env (se existir) para o ambiente.
+# É a primeira coisa que fazemos para garantir que as variáveis estejam disponíveis.
+load_dotenv()
 
 # --- 1. CONFIGURAÇÕES DE SEGURANÇA ---
 
-# <<< ALTERADO: Lê a chave secreta do ambiente.
-# Você NUNCA deve deixar chaves secretas no código.
-SECRET_KEY = os.environ.get("SECRET_KEY")
-if SECRET_KEY is None:
-    raise RuntimeError("Variável de ambiente 'SECRET_KEY' não definida.")
+# Lê a chave secreta do ambiente.
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("FATAL: Variável de ambiente 'SECRET_KEY' não definida. Verifique seu arquivo .env")
 
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # Token válido por 1 dia
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/usuarios/login")
@@ -27,7 +31,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/usuarios/login")
 app = FastAPI()
 
 # --- 2. MODELOS (Schemas Pydantic) ---
-# ... (Seus modelos Pydantic não precisam de alteração) ...
+# Nenhuma alteração necessária aqui
 class LoginResponse(BaseModel):
     access_token: str
     token_type: str
@@ -65,46 +69,59 @@ class CartaoPublic(BaseModel):
     is_default: bool
     bandeira: str
 
-# --- 3. GERENCIAMENTO DE CONEXÃO COM O BANCO ---
+# --- 3. GERENCIAMENTO DE CONEXÃO COM O BANCO (CORRIGIDO) ---
 
-# <<< ALTERADO: Esta função agora lê a PORTA do banco
-# a partir das variáveis de ambiente.
 def get_db():
-    db = None
-    
-    # Lê as credenciais do ambiente
-    DB_HOST = os.environ.get("DB_HOST")
-    DB_USER = os.environ.get("DB_USER")
-    DB_PASSWORD = os.environ.get("DB_PASSWORD")
-    DB_NAME = os.environ.get("DB_NAME")
-    DB_PORT = os.environ.get("DB_PORT") # <<< ADICIONADO
+    # Lê as credenciais do ambiente (carregadas pelo load_dotenv() no topo do arquivo)
+    db_config = {
+        "host": os.getenv("DB_HOST"),
+        "user": os.getenv("DB_USER"),
+        "password": os.getenv("DB_PASSWORD"),
+        "database": os.getenv("DB_NAME"),
+        "port": os.getenv("DB_PORT")
+    }
 
-    # Garante que todas as variáveis foram configuradas no Render
-    if not all([DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, DB_PORT]): # <<< ALTERADO
+    # Verifica se todas as variáveis essenciais foram carregadas
+    if not all(db_config.values()):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
-            detail="Variáveis de ambiente do banco de dados não configuradas."
+            detail="Variáveis de ambiente do banco de dados não configuradas. Verifique o arquivo .env"
         )
+    
+    # Converte a porta para inteiro
+    db_config['port'] = int(db_config['port'])
+
+    db = None
+    try:
+        # Tenta conectar COM SSL (para produção/nuvem como PlanetScale/Render)
+        db_config_ssl = db_config.copy()
+        db_config_ssl.update({
+            "ssl_ca": "/etc/secrets/tidb_ca.pem",
+            "ssl_verify_cert": True
+        })
+        # print("Tentando conectar com SSL...") # Linha de debug, pode remover depois
+        db = mysql.connector.connect(**db_config_ssl)
+    except mysql.connector.Error as err:
+        # Se a conexão SSL falhar (comum em ambiente local), tenta conectar SEM SSL.
+        # print(f"Conexão SSL falhou ({err}), tentando sem SSL...") # Linha de debug
+        try:
+            db = mysql.connector.connect(**db_config)
+        except mysql.connector.Error as final_err:
+            # Se ambas as tentativas falharem, lança o erro final.
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Erro de conexão com o banco: {final_err}")
 
     try:
-        db = mysql.connector.connect(
-            host=DB_HOST,
-            user=DB_USER,
-            password=DB_PASSWORD,
-            database=DB_NAME,
-            port=int(DB_PORT),
-            ssl_ca="/etc/secrets/tidb_ca.pem",
-            ssl_verify_cert=True  # <<< ADICIONE ESTA LINHA
-        )
         yield db
-    except mysql.connector.Error as err:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Erro de conexão com o banco: {err}")
     finally:
-        if db:
+        if db and db.is_connected():
             db.close()
 
-# --- 4. FUNÇÕES AUXILIARES DE AUTENTICAÇÃO E SEGURANÇA ---
-# ... (Suas funções auxiliares não precisam de alteração) ...
+# --- 4. FUNÇÕES AUXILIARES DE AUTENTICAÇÃO ---
+# ... (Nenhuma alteração necessária) ...
+
+# --- 5. ROTAS DA API ---
+# ... (Nenhuma alteração necessária, seu código de rotas está ótimo) ...
+# (O restante do seu código de rotas foi omitido aqui para brevidade, mas você deve mantê-lo como está)
 def verificar_senha(senha_plana: str, senha_hashed: str) -> bool:
     return pwd_context.verify(senha_plana, senha_hashed)
 
@@ -141,9 +158,6 @@ async def get_current_user_id(token: str = Depends(oauth2_scheme)) -> int:
         return user_id
     except (JWTError, ValueError):
         raise credentials_exception
-
-# --- 5. ROTAS DA API ---
-# (Nenhuma alteração necessária nas rotas)
 
 # --- ROTAS DE USUÁRIOS E CARTÕES (sem alterações) ---
 @app.post("/usuarios/cadastrar", status_code=status.HTTP_201_CREATED, summary="Registra um novo usuário")
@@ -201,51 +215,102 @@ def login_usuario(form_data: OAuth2PasswordRequestForm = Depends(), db: mysql.co
         user_name=user_in_db.nome, card_count=card_count, active_session_info=active_session_info
     )
 
-# ... (Rotas de cartões permanecem iguais)
 @app.post("/cartoes/cadastrar", status_code=status.HTTP_201_CREATED, summary="Cadastra um novo cartão para o usuário logado")
 def cadastrar_cartao(cartao: CartaoCreate, current_user_id: int = Depends(get_current_user_id), db: mysql.connector.MySQLConnection = Depends(get_db)):
     cursor = db.cursor()
     try:
+        # <<< ALTERAÇÃO CRÍTICA FALTANTE >>>
+        # Verifica se o usuário já tem algum cartão. Se não tiver, este será o padrão.
+        cursor.execute("SELECT COUNT(*) FROM cartoes WHERE usuario_id = %s", (current_user_id,))
+        cartao_count = cursor.fetchone()[0]
+        is_first_card = (cartao_count == 0)
+
         cursor.execute(
-            "INSERT INTO cartoes (numero, nome, validade, cvv, usuario_id) VALUES (%s, %s, %s, %s, %s)",
-            (cartao.numero, cartao.nome, cartao.validade, cartao.cvv, current_user_id)
+            "INSERT INTO cartoes (numero, nome, validade, cvv, usuario_id, is_default) VALUES (%s, %s, %s, %s, %s, %s)",
+            (cartao.numero, cartao.nome, cartao.validade, cartao.cvv, current_user_id, is_first_card)
         )
         db.commit()
     except mysql.connector.Error as err:
+        db.rollback()
         raise HTTPException(status_code=400, detail=f"Não foi possível cadastrar o cartão: {err}")
     finally:
         cursor.close()
     return {"status": "sucesso", "mensagem": "Cartão cadastrado."}
 
+# main.py
+
+# ... (seu código anterior) ...
+
 @app.get("/cartoes", response_model=List[CartaoPublic], summary="Lista os cartões do usuário logado")
 def get_cartoes_do_usuario(current_user_id: int = Depends(get_current_user_id), db: mysql.connector.MySQLConnection = Depends(get_db)):
-    cursor = db.cursor(dictionary=True)
-    cursor.execute("SELECT id, numero, nome, validade, is_default FROM cartoes WHERE usuario_id = %s", (current_user_id,))
-    cartoes = cursor.fetchall()
-    cursor.close()
-    
+    try:
+        cursor = db.cursor(dictionary=True)
+        
+        # Query SQL para buscar os cartões. Garantimos que is_default nunca será nulo na resposta.
+        # A função COALESCE(is_default, 0) diz ao banco: "Se is_default for nulo, retorne 0".
+        sql_query = """
+            SELECT id, numero, nome, validade, COALESCE(is_default, 0) as is_default 
+            FROM cartoes 
+            WHERE usuario_id = %s
+        """
+        cursor.execute(sql_query, (current_user_id,))
+        cartoes_from_db = cursor.fetchall()
+
+    except mysql.connector.Error as err:
+        # Se houver qualquer erro na comunicação com o banco, retorne um erro claro.
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Erro ao buscar cartões no banco de dados: {err}")
+    finally:
+        if 'cursor' in locals() and cursor:
+            cursor.close()
+
     cartoes_publicos = []
-    for cartao in cartoes:
-        cartao['is_default'] = bool(cartao.get('is_default', 0))
-        if cartao.get('numero') and len(cartao['numero']) > 4:
-            cartao['numero'] = f"**** **** **** {cartao['numero'][-4:]}"
-        cartao['bandeira'] = "visa" 
-        cartoes_publicos.append(CartaoPublic(**cartao))
+    if cartoes_from_db:
+        for cartao in cartoes_from_db:
+            # Com a query corrigida, 'is_default' sempre terá um valor (0 ou 1).
+            # Esta conversão para booleano agora é segura.
+            cartao['is_default'] = bool(cartao['is_default'])
+            
+            # Mascarando o número do cartão
+            if cartao.get('numero') and len(cartao['numero']) > 4:
+                cartao['numero'] = f"**** **** **** {cartao['numero'][-4:]}"
+            else:
+                cartao['numero'] = "****"  # Fallback para números inválidos
+            
+            # Adiciona uma bandeira fictícia (pode ser melhorado no futuro)
+            cartao['bandeira'] = "visa"
+            
+            # Cria o objeto Pydantic e adiciona à lista de resposta
+            cartoes_publicos.append(CartaoPublic(**cartao))
             
     return cartoes_publicos
+
+# ... (o resto das suas rotas, como definir_padrao e excluir_cartao, continuam iguais) ...
+
+
+
+# main.py
+
+# ... (todo o seu código anterior) ...
 
 @app.post("/cartoes/{cartao_id}/definir-padrao", status_code=status.HTTP_204_NO_CONTENT, summary="Define um cartão como padrão para pagamento")
 def definir_cartao_padrao(cartao_id: int, current_user_id: int = Depends(get_current_user_id), db: mysql.connector.MySQLConnection = Depends(get_db)):
     cursor = db.cursor()
-    cursor.execute("SELECT id FROM cartoes WHERE id = %s AND usuario_id = %s", (cartao_id, current_user_id))
-    if not cursor.fetchone():
-        cursor.close()
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cartão não encontrado ou não pertence a este usuário.")
-
     try:
+        # PASSO 1: Garantir que o cartão existe e pertence ao usuário.
+        cursor.execute("SELECT id FROM cartoes WHERE id = %s AND usuario_id = %s", (cartao_id, current_user_id))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cartão não encontrado ou não pertence a este usuário.")
+
+        # PASSO 2: Remover o status de padrão de TODOS os outros cartões do usuário.
+        # Esta é uma operação única e simples.
         cursor.execute("UPDATE cartoes SET is_default = FALSE WHERE usuario_id = %s", (current_user_id,))
+        db.commit() # Commit da primeira parte.
+
+        # PASSO 3: Definir o novo cartão como padrão.
+        # Esta é uma segunda operação, também simples.
         cursor.execute("UPDATE cartoes SET is_default = TRUE WHERE id = %s AND usuario_id = %s", (cartao_id, current_user_id))
-        db.commit()
+        db.commit() # Commit da segunda parte.
+
     except mysql.connector.Error as err:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Erro no banco de dados ao definir cartão padrão: {err}")
@@ -253,25 +318,43 @@ def definir_cartao_padrao(cartao_id: int, current_user_id: int = Depends(get_cur
         cursor.close()
     return None
 
+
 @app.delete("/cartoes/{cartao_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Exclui um cartão do usuário logado")
 def excluir_cartao(cartao_id: int, current_user_id: int = Depends(get_current_user_id), db: mysql.connector.MySQLConnection = Depends(get_db)):
     cursor = db.cursor(dictionary=True)
-    cursor.execute("SELECT id FROM cartoes WHERE id = %s AND usuario_id = %s", (cartao_id, current_user_id))
-    cartao_para_excluir = cursor.fetchone()
-
-    if not cartao_para_excluir:
-        cursor.close()
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cartão não encontrado ou não pertence a este usuário.")
-
     try:
+        # PASSO 1: Obter as informações do cartão a ser excluído.
+        cursor.execute("SELECT id, is_default FROM cartoes WHERE id = %s AND usuario_id = %s", (cartao_id, current_user_id))
+        cartao_para_excluir = cursor.fetchone()
+
+        if not cartao_para_excluir:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cartão não encontrado ou não pertence a este usuário.")
+
+        # PASSO 2: Excluir o cartão. Operação simples.
         cursor.execute("DELETE FROM cartoes WHERE id = %s", (cartao_id,))
-        db.commit()
+        db.commit() # Commit da exclusão.
+
+        # PASSO 3 (CONDICIONAL): Se o cartão excluído era o padrão, promover outro.
+        # Isso acontece fora da transação original, em uma nova operação.
+        if cartao_para_excluir['is_default']:
+            # Busca o primeiro cartão que sobrou.
+            cursor.execute("SELECT id FROM cartoes WHERE usuario_id = %s ORDER BY id ASC LIMIT 1", (current_user_id,))
+            outro_cartao = cursor.fetchone()
+            if outro_cartao:
+                # Promove o novo cartão a padrão.
+                cursor.execute("UPDATE cartoes SET is_default = TRUE WHERE id = %s", (outro_cartao['id'],))
+                db.commit() # Commit da promoção.
+
     except mysql.connector.Error as err:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Erro no banco de dados ao excluir o cartão: {err}")
     finally:
         cursor.close()
     return None
+
+
+# ... (o resto do seu código main.py continua igual) ...
+
 
 # --- ROTAS DE SESSÃO (CHECK-IN/CHECKOUT) ---
 
