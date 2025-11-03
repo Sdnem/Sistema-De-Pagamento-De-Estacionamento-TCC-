@@ -31,6 +31,9 @@ sealed class OperationState<out T> {
  */
 class CartaoViewModel : ViewModel() {
 
+    // Serviço da API
+    private val cartaoService = RetrofitClient.api
+
     // Estado para a lista de cartões
     private val _listaCartoesState = MutableStateFlow<ListaCartoesState>(ListaCartoesState.Loading)
     val listaCartoesState: StateFlow<ListaCartoesState> = _listaCartoesState.asStateFlow()
@@ -39,9 +42,6 @@ class CartaoViewModel : ViewModel() {
     private val _definirPadraoState = MutableStateFlow<OperationState<String>>(OperationState.Idle)
     val definirPadraoState: StateFlow<OperationState<String>> = _definirPadraoState.asStateFlow()
 
-    // ========================================================
-    //        NOVO ESTADO PARA EXCLUSÃO DE CARTÃO
-    // ========================================================
     // Estado para refletir o resultado da operação de excluir cartão
     private val _excluirCartaoState = MutableStateFlow<OperationState<String>>(OperationState.Idle)
     val excluirCartaoState: StateFlow<OperationState<String>> = _excluirCartaoState.asStateFlow()
@@ -53,9 +53,7 @@ class CartaoViewModel : ViewModel() {
     fun buscarCartoes(context: Context) {
         viewModelScope.launch {
             _listaCartoesState.value = ListaCartoesState.Loading
-            // Reseta os estados de operação para evitar que mensagens antigas apareçam
-            _definirPadraoState.value = OperationState.Idle
-            _excluirCartaoState.value = OperationState.Idle
+            // Não resetamos os estados de operação aqui para que o snackbar possa ser exibido
 
             val token = SessionManager.getAuthToken(context)
             if (token == null) {
@@ -64,7 +62,7 @@ class CartaoViewModel : ViewModel() {
             }
 
             try {
-                val response = RetrofitClient.api.getMeusCartoes("Bearer $token")
+                val response = cartaoService.getMeusCartoes("Bearer $token")
                 if (response.isSuccessful && response.body() != null) {
                     _listaCartoesState.value = ListaCartoesState.Success(response.body()!!)
                 } else {
@@ -90,10 +88,13 @@ class CartaoViewModel : ViewModel() {
             }
 
             try {
-                val response = RetrofitClient.api.definirCartaoPadrao("Bearer $token", cartaoId)
+                val response = cartaoService.definirCartaoPadrao("Bearer $token", cartaoId)
                 if (response.isSuccessful) {
                     _definirPadraoState.value = OperationState.Success("Cartão definido como padrão!")
-                    // Após o sucesso, recarrega a lista para a UI refletir a mudança.
+                    // =========================================================================
+                    //   PONTO CRÍTICO: Após o sucesso, recarrega a lista para a UI refletir
+                    //   a mudança do ícone de "padrão".
+                    // =========================================================================
                     buscarCartoes(context)
                 } else {
                     val errorMsg = response.errorBody()?.string() ?: "Não foi possível definir como padrão."
@@ -105,17 +106,6 @@ class CartaoViewModel : ViewModel() {
         }
     }
 
-    /**
-     * Reseta o estado da operação 'definir padrão' para Idle.
-     */
-    fun resetDefinirPadraoState() {
-        _definirPadraoState.value = OperationState.Idle
-    }
-
-
-    // ========================================================
-    //        NOVAS FUNÇÕES PARA EXCLUSÃO DE CARTÃO
-    // ========================================================
     /**
      * Exclui um cartão específico do usuário.
      */
@@ -129,10 +119,13 @@ class CartaoViewModel : ViewModel() {
             }
 
             try {
-                val response = RetrofitClient.api.excluirCartao("Bearer $token", cartaoId)
+                val response = cartaoService.excluirCartao("Bearer $token", cartaoId)
                 if (response.isSuccessful) {
                     _excluirCartaoState.value = OperationState.Success("Cartão excluído com sucesso!")
-                    // IMPORTANTE: Após excluir, também recarregamos a lista de cartões.
+                    // =========================================================================
+                    //   PONTO CRÍTICO: Após excluir, também recarregamos a lista para que
+                    //   o item desaparecido seja refletido imediatamente na UI.
+                    // =========================================================================
                     buscarCartoes(context)
                 } else {
                     val errorMsg = response.errorBody()?.string() ?: "Não foi possível excluir o cartão."
@@ -142,6 +135,14 @@ class CartaoViewModel : ViewModel() {
                 _excluirCartaoState.value = OperationState.Error("Falha na conexão: ${e.message}")
             }
         }
+    }
+
+    /**
+     * Reseta o estado da operação 'definir padrão' para Idle.
+     * Isso evita que a mensagem de sucesso/erro seja exibida novamente (ex: ao rotacionar a tela).
+     */
+    fun resetDefinirPadraoState() {
+        _definirPadraoState.value = OperationState.Idle
     }
 
     /**

@@ -134,7 +134,7 @@ fun ExibirQrCodeEntradaScreen(navController: NavController, token: String?) {
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Para liberar sua entrada, aponte este código para o leitor da cancela.",
+                            text = "Para liberar sua entrada, aponte este código para o leitor.",
                             style = MaterialTheme.typography.bodyLarge,
                             textAlign = TextAlign.Center,
                             color = MaterialTheme.colorScheme.onSurfaceVariant

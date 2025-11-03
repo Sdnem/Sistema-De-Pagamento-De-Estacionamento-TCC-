@@ -14,9 +14,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.myapplication.CartaoViewModel
@@ -32,13 +35,26 @@ fun TelaCartoes(
     cartaoViewModel: CartaoViewModel = viewModel()
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
 
-    // Lógica para buscar cartões na inicialização
-    LaunchedEffect(key1 = true) {
-        cartaoViewModel.buscarCartoes(context)
+    // --- CORREÇÃO APLICADA AQUI ---
+    // Este `DisposableEffect` substitui o `LaunchedEffect(key1 = true)`.
+    // Ele observa o ciclo de vida da tela e busca os cartões sempre que a tela
+    // se torna visível (evento ON_RESUME).
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                cartaoViewModel.buscarCartoes(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
+    // --- FIM DA CORREÇÃO ---
 
     val listaState by cartaoViewModel.listaCartoesState.collectAsState()
     val definirPadraoState by cartaoViewModel.definirPadraoState.collectAsState()
@@ -103,10 +119,23 @@ fun TelaCartoes(
         ) {
             when (val state = listaState) {
                 is ListaCartoesState.Loading -> {
-                    // O indicador de progresso geral agora lida com isso
+                    // O indicador de progresso global já lida com o estado de loading inicial.
                 }
                 is ListaCartoesState.Error -> {
-                    // Tela de erro...
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = state.message,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                        Button(onClick = { cartaoViewModel.buscarCartoes(context) }) {
+                            Text("Tentar Novamente")
+                        }
+                    }
                 }
                 is ListaCartoesState.Success -> {
                     if (state.cartoes.isEmpty()) {
@@ -255,6 +284,33 @@ fun CartaoItem(
     }
 }
 
-// A Composable TelaVaziaCartoes permanece a mesma.
 @Composable
-fun TelaVaziaCartoes() { /* ... (código existente sem alterações) ... */ }
+fun TelaVaziaCartoes() {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = Icons.Default.CreditCardOff,
+            contentDescription = "Nenhum cartão",
+            modifier = Modifier.size(80.dp),
+            tint = Color.Gray
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "Nenhum cartão cadastrado",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "Adicione um novo cartão de crédito para começar a usar o estacionamento.",
+            style = MaterialTheme.typography.bodyLarge,
+            textAlign = TextAlign.Center,
+            color = Color.Gray
+        )
+    }
+}
