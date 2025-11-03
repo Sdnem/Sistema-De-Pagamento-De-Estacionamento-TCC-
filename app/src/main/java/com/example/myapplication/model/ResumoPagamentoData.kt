@@ -11,10 +11,3 @@ data class ResumoPagamentoData(
     val valorTotal: String,
     val finalCartao: String
 )
-
-data class DadosSessao(
-    val entrada: LocalDateTime?,
-    val saida: LocalDateTime?,
-    val tempoTotal: String,
-    val valorTotal: String
-)

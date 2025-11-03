@@ -118,7 +118,7 @@ fun TelaEstacionamento(
                 InfoCard(
                     icon = Icons.Default.Payments,
                     // O label agora indica a fonte do valor
-                    label = "Custo (do Servidor)",
+                    label = "Custo Atual",
                     value = custoFormatado,
                     valueFontSize = 48.sp,
                     valueColor = MaterialTheme.colorScheme.primary

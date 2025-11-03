@@ -53,7 +53,12 @@ fun CadastroCartaoScreen(navController: NavController) {
             // ... (Todos os seus OutlinedTextFields continuam aqui, sem alteração) ...
             OutlinedTextField(
                 value = numeroCartao,
-                onValueChange = { numeroCartao = it },
+                onValueChange = {
+                    // Limita o número do cartão a 16 caracteres
+                    if (it.length <= 16) {
+                        numeroCartao = it
+                    }
+                },
                 label = { Text("Número do Cartão") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
                 modifier = Modifier.fillMaxWidth()
@@ -70,15 +75,37 @@ fun CadastroCartaoScreen(navController: NavController) {
             Row(Modifier.fillMaxWidth()) {
                 OutlinedTextField(
                     value = dataValidade,
-                    onValueChange = { dataValidade = it },
+                    onValueChange = { newValue ->
+                        // Lógica para formatar a data como MM/AA
+
+                        // Filtra para manter apenas dígitos
+                        val digits = newValue.filter { it.isDigit() }
+                        // Limita a 4 dígitos (MMYY)
+                        val truncatedDigits = digits.take(4)
+
+                        val formattedDate = when {
+                            // Se tiver 2 ou menos dígitos, apenas os exibe (ex: "01")
+                            truncatedDigits.length <= 2 -> truncatedDigits
+                            // Se tiver 3 ou 4 dígitos, adiciona a barra (ex: "01/2" ou "01/25")
+                            else -> "${truncatedDigits.substring(0, 2)}/${truncatedDigits.substring(2)}"
+                        }
+
+                        dataValidade = formattedDate
+                    },
                     label = { Text("Validade (MM/AA)") },
+                    // O input total terá 5 caracteres (MM/AA)
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
                     modifier = Modifier.weight(1f)
                 )
                 Spacer(modifier = Modifier.width(16.dp))
                 OutlinedTextField(
                     value = cvv,
-                    onValueChange = { cvv = it },
+                    onValueChange = {
+                        // Limita o tamanho do CVV a 3 dígitos
+                        if (it.length <= 3){
+                            cvv = it
+                        }
+                    },
                     label = { Text("CVV") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
                     modifier = Modifier.weight(1f)

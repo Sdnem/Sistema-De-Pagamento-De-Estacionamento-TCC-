@@ -1,8 +1,9 @@
-# main.py - VERSÃO PARA PRODUÇÃO (RENDER/PLANETSCALE)
+# main.py - VERSÃO PARA PRODUÇÃO (RENDER/TiDB)
 
 from fastapi import FastAPI, HTTPException, status, Depends
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, ConfigDict
+from decimal import Decimal
 import mysql.connector
 from typing import Optional, List
 from datetime import datetime, timedelta
@@ -65,6 +66,22 @@ class CartaoPublic(BaseModel):
     is_default: bool
     bandeira: str
 
+class PagamentoBase(BaseModel):
+    horario_entrada: datetime
+    horario_saida: datetime
+    valor_pago: Decimal
+    numero_cartao: int # Assumindo que este é o número, não o ID do cartão
+
+class PagamentoCreate(PagamentoBase):
+    # O usuario_id virá do token, não do body
+    pass
+
+class Pagamento(PagamentoBase):
+    id: int
+    usuario_id: int
+
+    model_config = ConfigDict(from_attributes=True)
+
 # --- 3. GERENCIAMENTO DE CONEXÃO COM O BANCO ---
 
 # <<< ALTERADO: Esta função agora lê a PORTA do banco
@@ -77,7 +94,7 @@ def get_db():
     DB_USER = os.environ.get("DB_USER")
     DB_PASSWORD = os.environ.get("DB_PASSWORD")
     DB_NAME = os.environ.get("DB_NAME")
-    DB_PORT = os.environ.get("DB_PORT") # <<< ADICIONADO
+    DB_PORT = os.environ.get("DB_PORT") 
 
     # Garante que todas as variáveis foram configuradas no Render
     if not all([DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, DB_PORT]): # <<< ALTERADO
@@ -273,6 +290,127 @@ def excluir_cartao(cartao_id: int, current_user_id: int = Depends(get_current_us
         cursor.close()
     return None
 
+@app.post("/pagamentos/", response_model=Pagamento, status_code=status.HTTP_201_CREATED)
+async def create_pagamento(
+    pagamento: PagamentoCreate,
+    db: mysql.connector.MySQLConnection = Depends(get_db),
+    current_user: Usuario = Depends(get_current_active_user)
+):
+    """
+    Registra um novo pagamento para o usuário autenticado.
+    """
+    cursor = None
+    try:
+        cursor = db.cursor()
+        
+        query = """
+        INSERT INTO pagamentos 
+        (horario_entrada, horario_saida, valor_pago, numero_cartao, usuario_id)
+        VALUES (%s, %s, %s, %s, %s)
+        """
+        
+        # Obtém o ID do usuário a partir do token de autenticação
+        usuario_id = current_user.id
+        
+        dados = (
+            pagamento.horario_entrada,
+            pagamento.horario_saida,
+            pagamento.valor_pago,
+            pagamento.numero_cartao,
+            usuario_id
+        )
+        
+        cursor.execute(query, dados)
+        db.commit()
+        
+        # Obtém o ID do pagamento que acabou de ser criado
+        new_pagamento_id = cursor.lastrowid
+        
+        # Retorna o objeto completo
+        return Pagamento(
+            id=new_pagamento_id,
+            **pagamento.dict(),
+            usuario_id=usuario_id
+        )
+
+    except mysql.connector.Error as err:
+        # Em caso de erro de integridade (ex: usuario_id não existe)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Erro ao registrar pagamento: {err}"
+        )
+    finally:
+        if cursor:
+            cursor.close()
+
+@app.get("/pagamentos/me/", response_model=List[Pagamento])
+async def read_meus_pagamentos(
+    db: mysql.connector.MySQLConnection = Depends(get_db),
+    current_user: Usuario = Depends(get_current_active_user)
+):
+    """
+    Obtém o histórico de pagamentos do usuário autenticado.
+    """
+    cursor = None
+    try:
+        # dictionary=True retorna os resultados como dicionários (útil para Pydantic)
+        cursor = db.cursor(dictionary=True)
+        
+        query = "SELECT * FROM pagamentos WHERE usuario_id = %s ORDER BY horario_saida DESC"
+        
+        cursor.execute(query, (current_user.id,))
+        
+        pagamentos = cursor.fetchall()
+        
+        return pagamentos
+
+    except mysql.connector.Error as err:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao buscar pagamentos: {err}"
+        )
+    finally:
+        if cursor:
+            cursor.close()
+
+@app.get("/pagamentos/{pagamento_id}", response_model=Pagamento)
+async def read_pagamento_por_id(
+    pagamento_id: int,
+    db: mysql.connector.MySQLConnection = Depends(get_db),
+    current_user: Usuario = Depends(get_current_active_user)
+):
+    """
+    Obtém um pagamento específico pelo ID,
+    verificando se ele pertence ao usuário autenticado.
+    """
+    cursor = None
+    try:
+        cursor = db.cursor(dictionary=True)
+        
+        # Query verifica o ID do pagamento E o ID do usuário (Segurança)
+        query = "SELECT * FROM pagamentos WHERE id = %s AND usuario_id = %s"
+        
+        cursor.execute(query, (pagamento_id, current_user.id))
+        
+        pagamento = cursor.fetchone()
+        
+        if not pagamento:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Pagamento não encontrado ou não pertence a este usuário."
+            )
+            
+        return pagamento
+
+    except mysql.connector.Error as err:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao buscar pagamento: {err}"
+        )
+    finally:
+        if cursor:
+            cursor.close()
+            
 # --- ROTAS DE SESSÃO (CHECK-IN/CHECKOUT) ---
 
 @app.post("/sessoes/checkin", status_code=status.HTTP_201_CREATED, summary="Inicia uma nova sessão de estacionamento")
