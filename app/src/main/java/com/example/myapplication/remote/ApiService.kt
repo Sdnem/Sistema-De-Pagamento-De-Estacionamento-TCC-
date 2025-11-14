@@ -1,7 +1,5 @@
 package com.example.myapplication.remote
 
-import com.example.myapplication.model.Pagamento
-import com.example.myapplication.model.PagamentoCreate
 import com.google.gson.JsonObject
 import retrofit2.Response
 import retrofit2.http.*

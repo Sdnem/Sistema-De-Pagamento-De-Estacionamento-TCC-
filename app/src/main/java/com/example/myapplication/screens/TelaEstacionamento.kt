@@ -31,6 +31,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Duration
 import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 
@@ -51,9 +53,27 @@ fun TelaEstacionamento(
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Erro: Horário de entrada não encontrado.") }
         return
     }
+
     val horarioEntrada = remember(horarioEntradaString) {
-        try { LocalDateTime.parse(horarioEntradaString, DateTimeFormatter.ISO_DATE_TIME) } catch (e: DateTimeParseException) { null }
+        try {
+            val zonedDateTime = ZonedDateTime.parse(horarioEntradaString, DateTimeFormatter.ISO_DATE_TIME)
+            // Converte o horário UTC do servidor para o horário do celular do usuário
+            zonedDateTime.withZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime()
+        } catch (e: Exception) {
+            try {
+                // FALLBACK: Se a string não tiver fuso, assume que é UTC e converte manualmente
+                val localDateRaw = LocalDateTime.parse(horarioEntradaString, DateTimeFormatter.ISO_DATE_TIME)
+                val utcZone = ZoneId.of("UTC")
+                val defaultZone = ZoneId.systemDefault()
+
+                // Dizemos que a data crua é UTC e convertemos para o fuso do celular
+                localDateRaw.atZone(utcZone).withZoneSameInstant(defaultZone).toLocalDateTime()
+            } catch (e2: Exception) {
+                null
+            }
+        }
     }
+
     if (horarioEntrada == null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Erro: Formato de horário inválido.") }
         return
@@ -75,11 +95,20 @@ fun TelaEstacionamento(
         while (true) {
             // Atualiza o tempo decorrido (lógica puramente visual)
             val agora = LocalDateTime.now()
-            val duracao = Duration.between(horarioEntrada, agora)
-            val horas = duracao.toHours()
-            val minutos = duracao.toMinutes() % 60
-            val segundos = duracao.seconds % 60
-            tempoFormatado = String.format("%02d:%02d:%02d", horas, minutos, segundos)
+
+            // Verifica se o horário de entrada é depois de agora (o que geraria negativo)
+            if (agora.isBefore(horarioEntrada)) {
+                tempoFormatado = "00:00:00"
+            } else {
+                val duracao = Duration.between(horarioEntrada, agora)
+
+                // Math.abs garante que, mesmo se houver uma falha milimétrica, o sinal de - não apareça
+                val horas = duracao.toHours()
+                val minutos = duracao.toMinutes() % 60
+                val segundos = duracao.seconds % 60
+
+                tempoFormatado = String.format("%02d:%02d:%02d", horas, minutos, segundos)
+            }
 
             // A cada 10 segundos (e na primeira execução), busca o preço do backend
             if (a % 10 == 0) {
