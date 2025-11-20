@@ -53,14 +53,14 @@ fun CadastroCartaoScreen(navController: NavController) {
             OutlinedTextField(
                 value = numeroCartao,
                 onValueChange = { newValue ->
+                    // 1. Mantém apenas números
                     val digits = newValue.filter { it.isDigit() }
-                    // Limita a 16 dígitos (0000 0000 0000 0000)
+
+                    // 2. Limita a 16 dígitos totais
                     val truncatedDigits = digits.take(16)
 
-                    val numeroCartaoFormatado = when {
-                        // A cada 4 dígitos, adiciona o espaço
-                        else -> "${truncatedDigits.substring(0, 4)} ${truncatedDigits.substring(4, 8)} ${truncatedDigits.substring(8, 12)} ${truncatedDigits.substring(12)}"
-                    }
+                    // 3. A mágica: Divide em grupos de 4 e junta com espaço
+                    val numeroCartaoFormatado = truncatedDigits.chunked(4).joinToString(" ")
 
                     numeroCartao = numeroCartaoFormatado
                 },
