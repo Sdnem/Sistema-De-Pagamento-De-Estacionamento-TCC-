@@ -11,14 +11,78 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.myapplication.model.SessionManager // <-- Garanta que está importado
 import com.example.myapplication.remote.RetrofitClient
 import com.google.gson.JsonObject
 import kotlinx.coroutines.launch
+
+// Transformação para o Cartão de Crédito (XXX XXXX XXXX XXXX)
+class CreditCardVisualTransformation : VisualTransformation {
+    override fun filter(text: AnnotatedString): TransformedText {
+        val trimmed = if (text.text.length >= 16) text.text.substring(0..15) else text.text
+        var out = ""
+        for (i in trimmed.indices) {
+            out += trimmed[i]
+            if (i % 4 == 3 && i != 15) out += " "
+        }
+
+        val creditCardOffsetTranslator = object : OffsetMapping {
+            override fun originalToTransformed(offset: Int): Int {
+                if (offset <= 3) return offset
+                if (offset <= 7) return offset + 1
+                if (offset <= 11) return offset + 2
+                if (offset <= 16) return offset + 3
+                return 19
+            }
+
+            override fun transformedToOriginal(offset: Int): Int {
+                if (offset <= 4) return offset
+                if (offset <= 9) return offset - 1
+                if (offset <= 14) return offset - 2
+                if (offset <= 19) return offset - 3
+                return 16
+            }
+        }
+
+        return TransformedText(AnnotatedString(out), creditCardOffsetTranslator)
+    }
+}
+
+// Transformação para Data (MM/AA)
+class DateVisualTransformation : VisualTransformation {
+    override fun filter(text: AnnotatedString): TransformedText {
+        val trimmed = if (text.text.length >= 4) text.text.substring(0..3) else text.text
+        var out = ""
+        for (i in trimmed.indices) {
+            out += trimmed[i]
+            if (i == 1) out += "/"
+        }
+
+        val dateOffsetTranslator = object : OffsetMapping {
+            override fun originalToTransformed(offset: Int): Int {
+                if (offset <= 1) return offset
+                if (offset <= 4) return offset + 1
+                return 5
+            }
+
+            override fun transformedToOriginal(offset: Int): Int {
+                if (offset <= 2) return offset
+                if (offset <= 5) return offset - 1
+                return 4
+            }
+        }
+
+        return TransformedText(AnnotatedString(out), dateOffsetTranslator)
+    }
+}
 
 @Composable
 fun CadastroCartaoScreen(navController: NavController) {
@@ -53,18 +117,14 @@ fun CadastroCartaoScreen(navController: NavController) {
             OutlinedTextField(
                 value = numeroCartao,
                 onValueChange = { newValue ->
-                    // 1. Mantém apenas números
-                    val digits = newValue.filter { it.isDigit() }
-
-                    // 2. Limita a 16 dígitos totais
-                    val truncatedDigits = digits.take(16)
-
-                    // 3. A mágica: Divide em grupos de 4 e junta com espaço
-                    val numeroCartaoFormatado = truncatedDigits.chunked(4).joinToString(" ")
-
-                    numeroCartao = numeroCartaoFormatado
+                    // Apenas filtra dígitos e limita o tamanho do DADO (não da visualização)
+                    if (newValue.length <= 16) {
+                        numeroCartao = newValue.filter { it.isDigit() }
+                    }
                 },
                 label = { Text("Número do Cartão") },
+                // AQUI entra a mágica visual
+                visualTransformation = CreditCardVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
                 modifier = Modifier.fillMaxWidth()
             )
@@ -81,30 +141,76 @@ fun CadastroCartaoScreen(navController: NavController) {
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(16.dp))
+
             Row(Modifier.fillMaxWidth()) {
+
+                // Função auxiliar para checar se está vencido (simulação simples)
+                fun isDateExpired(input: String): Boolean {
+                    if (input.length != 4) return false
+
+                    val inputMonth = input.substring(0, 2).toIntOrNull() ?: return false
+                    val inputYear = input.substring(2).toIntOrNull() ?: return false
+
+                    // Exemplo estático: Considerando que estamos em Novembro de 2025 (11/25)
+                    // Em um app real, pegue a data atual do sistema via Calendar ou LocalDate
+                    val currentMonth = 11
+                    val currentYear = 25
+
+                    if (inputYear < currentYear) return true
+                    if (inputYear == currentYear && inputMonth < currentMonth) return true
+
+                    return false
+                }
+
+                val hasError = isDateExpired(dataValidade)
+
                 OutlinedTextField(
                     value = dataValidade,
                     onValueChange = { newValue ->
-                        // Lógica para formatar a data como MM/AA
+                        // 1. Remove tudo que não for número
+                        val newDigits = newValue.filter { it.isDigit() }
 
-                        // Filtra para manter apenas dígitos
-                        val digits = newValue.filter { it.isDigit() }
-                        // Limita a 4 dígitos (MMYY)
-                        val truncatedDigits = digits.take(4)
+                        // Validação progressiva
+                        var isValidInput = true
 
-                        val formattedDate = when {
-                            // Se tiver 2 ou menos dígitos, apenas os exibe (ex: "01")
-                            truncatedDigits.length <= 2 -> truncatedDigits
-                            // Se tiver 3 ou 4 dígitos, adiciona a barra (ex: "01/2" ou "01/25")
-                            else -> "${truncatedDigits.substring(0, 2)}/${truncatedDigits.substring(2)}"
+                        // Regra A: Não pode ter mais de 4 dígitos
+                        if (newDigits.length > 4) {
+                            isValidInput = false
                         }
 
-                        dataValidade = formattedDate
+                        // Regra B: O primeiro dígito só pode ser 0 ou 1
+                        // (Isso obriga o usuário a digitar "09" em vez de apenas "9")
+                        if (newDigits.isNotEmpty()) {
+                            val firstDigit = newDigits[0].digitToInt()
+                            if (firstDigit > 1) isValidInput = false
+                        }
+
+                        // Regra C: Se já tiver 2 dígitos (o mês), deve ser entre 01 e 12
+                        if (newDigits.length >= 2) {
+                            val month = newDigits.substring(0, 2).toInt()
+                            if (month < 1 || month > 12) isValidInput = false
+                        }
+
+                        // Só atualiza o estado se passar em todas as validações
+                        if (isValidInput) {
+                            dataValidade = newDigits
+                        }
                     },
+
+                    // Se tiver erro, fica vermelho
+                    isError = hasError,
+
+                    // Opcional: Texto de suporte explicando o erro
+                    supportingText = {
+                        if (hasError) {
+                            Text("Cartão vencido", color = MaterialTheme.colorScheme.error)
+                        }
+                    },
+
                     label = { Text("Validade (MM/AA)") },
-                    // O input total terá 5 caracteres (MM/AA)
+                    visualTransformation = DateVisualTransformation(), // Usando a classe que criamos antes
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f) // Ou ajuste conforme seu layout
                 )
                 Spacer(modifier = Modifier.width(16.dp))
                 OutlinedTextField(

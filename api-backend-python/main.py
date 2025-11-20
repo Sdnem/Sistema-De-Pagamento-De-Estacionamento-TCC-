@@ -240,21 +240,24 @@ def login_usuario(form_data: OAuth2PasswordRequestForm = Depends(), db: mysql.co
 @app.post("/cartoes/cadastrar", status_code=status.HTTP_201_CREATED, summary="Cadastra um novo cartão para o usuário logado")
 def cadastrar_cartao(cartao: CartaoCreate, current_user_id: int = Depends(get_current_user_id), db: mysql.connector.MySQLConnection = Depends(get_db)):
     
-    if len(cartao.numero) < 16:
+    if len(cartao.numero) < 16: 
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="O número do cartão deve ter pelo menos 16 caracteres.")
     if len(cartao.cvv) < 3:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="O cvv do cartão deve ter pelo menos 3 caracteres.")
     if len(cartao.validade) < 4:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="A validade do cartão deve ter pelo menos 4 caracteres.")
     
+    ultimos_digitos = cartao.numero[-4:]
+
     numero_cartao_hashed = get_numero_cartao_hash(cartao.numero)
     nome_hashed = get_nome_cartao_hash(cartao.nome)
     cvv_hashed = get_cvv_hash(cartao.cvv)
+
     cursor = db.cursor()
     try:
         cursor.execute(
-            "INSERT INTO cartoes (numero, nome, validade, cvv, usuario_id) VALUES (%s, %s, %s, %s, %s)",
-            (numero_cartao_hashed, nome_hashed, cartao.validade, cvv_hashed, current_user_id)
+            "INSERT INTO cartoes (numero, ultimos_digitos, nome, validade, cvv, usuario_id) VALUES (%s, %s, %s, %s, %s, %s)",
+            (numero_cartao_hashed, ultimos_digitos, nome_hashed, cartao.validade, cvv_hashed, current_user_id)
         )
         db.commit()
     except mysql.connector.Error as err:
@@ -266,16 +269,15 @@ def cadastrar_cartao(cartao: CartaoCreate, current_user_id: int = Depends(get_cu
 @app.get("/cartoes", response_model=List[CartaoPublic], summary="Lista os cartões do usuário logado")
 def get_cartoes_do_usuario(current_user_id: int = Depends(get_current_user_id), db: mysql.connector.MySQLConnection = Depends(get_db)):
     cursor = db.cursor(dictionary=True)
-    cursor.execute("SELECT id, numero, nome, validade, is_default FROM cartoes WHERE usuario_id = %s", (current_user_id,))
+    cursor.execute("SELECT id, ultimos_digitos, validade, is_default FROM cartoes WHERE usuario_id = %s", (current_user_id,))
     cartoes = cursor.fetchall()
     cursor.close()
-    
+
     cartoes_publicos = []
     for cartao in cartoes:
         cartao['is_default'] = bool(cartao.get('is_default', 0))
-        if cartao.get('numero') and len(cartao['numero']) > 4:
-            cartao['numero'] = f"**** **** **** {cartao['numero'][-4:]}"
-        cartao['bandeira'] = "visa" 
+        cartao['numero'] = f"**** **** **** {cartao['ultimos_digitos']}"         
+        cartao['bandeira'] = "visa" # Logica de bandeira (opcional)
         cartoes_publicos.append(CartaoPublic(**cartao))
             
     return cartoes_publicos
