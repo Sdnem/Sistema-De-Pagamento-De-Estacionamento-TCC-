@@ -50,14 +50,19 @@ fun CadastroCartaoScreen(navController: NavController) {
                 modifier = Modifier.padding(top = 8.dp, bottom = 24.dp)
             )
 
-            // ... (Todos os seus OutlinedTextFields continuam aqui, sem alteração) ...
             OutlinedTextField(
                 value = numeroCartao,
-                onValueChange = {
-                    // Limita o número do cartão a 16 caracteres
-                    if (it.length <= 16) {
-                        numeroCartao = it
+                onValueChange = { newValue ->
+                    val digits = newValue.filter { it.isDigit() }
+                    // Limita a 16 dígitos (0000 0000 0000 0000)
+                    val truncatedDigits = digits.take(16)
+
+                    val numeroCartaoFormatado = when {
+                        // A cada 4 dígitos, adiciona o espaço
+                        else -> "${truncatedDigits.substring(0, 4)} ${truncatedDigits.substring(4, 8)} ${truncatedDigits.substring(8, 12)} ${truncatedDigits.substring(12)}"
                     }
+
+                    numeroCartao = numeroCartaoFormatado
                 },
                 label = { Text("Número do Cartão") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
@@ -66,7 +71,11 @@ fun CadastroCartaoScreen(navController: NavController) {
             Spacer(modifier = Modifier.height(16.dp))
             OutlinedTextField(
                 value = nomeTitular,
-                onValueChange = { nomeTitular = it },
+                onValueChange = {
+                    if (it.length <= 50) {
+                        nomeTitular = it
+                    }
+                },
                 label = { Text("Nome do Titular") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Next),
                 modifier = Modifier.fillMaxWidth()

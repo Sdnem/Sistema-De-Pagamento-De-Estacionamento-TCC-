@@ -128,6 +128,24 @@ def verificar_senha(senha_plana: str, senha_hashed: str) -> bool:
 def get_senha_hash(senha: str) -> str:
     return pwd_context.hash(senha)
 
+def verificar_numero_cartao(numero_cartao_plano: str, numero_cartao_hashed: str) -> bool:
+    return pwd_context.verify(numero_cartao_plano, numero_cartao_hashed)
+
+def get_numero_cartao_hash(numero_cartao: str) -> str:
+    return pwd_context.hash(numero_cartao)
+
+def verificar_nome_cartao(nome_cartao_plano: str, nome_cartao_hashed: str) -> bool:
+    return pwd_context.verify(nome_cartao_plano, nome_cartao_hashed)
+
+def get_nome_cartao_hash(nome_cartao: str) -> str:
+    return pwd_context.hash(nome_cartao)
+
+def verificar_cvv(cvv_plano: int, cvv_hashed: int) -> bool:
+    return pwd_context.verify(cvv_plano, cvv_hashed)
+
+def get_cvv_hash(cvv: int) -> int:
+    return pwd_context.hash(cvv)
+
 def criar_token_acesso(data: dict) -> str:
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -221,11 +239,22 @@ def login_usuario(form_data: OAuth2PasswordRequestForm = Depends(), db: mysql.co
 # ... (Rotas de cartões permanecem iguais)
 @app.post("/cartoes/cadastrar", status_code=status.HTTP_201_CREATED, summary="Cadastra um novo cartão para o usuário logado")
 def cadastrar_cartao(cartao: CartaoCreate, current_user_id: int = Depends(get_current_user_id), db: mysql.connector.MySQLConnection = Depends(get_db)):
+    
+    if len(cartao.numero) < 16:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="O número do cartão deve ter pelo menos 16 caracteres.")
+    if len(cartao.cvv) < 3:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="O cvv do cartão deve ter pelo menos 3 caracteres.")
+    if len(cartao.validade) < 4:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="A validade do cartão deve ter pelo menos 4 caracteres.")
+    
+    numero_cartao_hashed = get_numero_cartao_hash(cartao.numero)
+    nome_hashed = get_nome_cartao_hash(cartao.nome)
+    cvv_hashed = get_cvv_hash(cartao.cvv)
     cursor = db.cursor()
     try:
         cursor.execute(
             "INSERT INTO cartoes (numero, nome, validade, cvv, usuario_id) VALUES (%s, %s, %s, %s, %s)",
-            (cartao.numero, cartao.nome, cartao.validade, cartao.cvv, current_user_id)
+            (numero_cartao_hashed, nome_hashed, cartao.validade, cvv_hashed, current_user_id)
         )
         db.commit()
     except mysql.connector.Error as err:
