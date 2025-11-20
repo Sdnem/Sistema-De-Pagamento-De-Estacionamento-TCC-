@@ -323,7 +323,7 @@ def excluir_cartao(cartao_id: int, current_user_id: int = Depends(get_current_us
 async def create_pagamento(
     pagamento: PagamentoCreate,
     db: mysql.connector.MySQLConnection = Depends(get_db),
-    current_user: Usuario = Depends(get_current_active_user)
+    current_user: UsuarioInDB = Depends(get_current_user_id)
 ):
     """
     Registra um novo pagamento para o usuário autenticado.
@@ -375,7 +375,7 @@ async def create_pagamento(
 @app.get("/pagamentos/me/", response_model=List[Pagamento])
 async def read_meus_pagamentos(
     db: mysql.connector.MySQLConnection = Depends(get_db),
-    current_user: Usuario = Depends(get_current_active_user)
+    current_user: UsuarioInDB = Depends(get_current_user_id)
 ):
     """
     Obtém o histórico de pagamentos do usuário autenticado.
@@ -406,7 +406,7 @@ async def read_meus_pagamentos(
 async def read_pagamento_por_id(
     pagamento_id: int,
     db: mysql.connector.MySQLConnection = Depends(get_db),
-    current_user: Usuario = Depends(get_current_active_user)
+    current_user: UsuarioInDB = Depends(get_current_user_id)
 ):
     """
     Obtém um pagamento específico pelo ID,
