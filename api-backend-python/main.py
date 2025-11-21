@@ -262,7 +262,7 @@ def cadastrar_cartao(cartao: CartaoCreate, current_user_id: int = Depends(get_cu
 @app.get("/cartoes", response_model=List[CartaoPublic], summary="Lista os cartões do usuário logado")
 def get_cartoes_do_usuario(current_user_id: int = Depends(get_current_user_id), db: mysql.connector.MySQLConnection = Depends(get_db)):
     cursor = db.cursor(dictionary=True)
-    cursor.execute("SELECT id, ultimos_digitos, validade, is_default FROM cartoes WHERE usuario_id = %s", (current_user_id,))
+    cursor.execute("SELECT id, ultimos_digitos, nome, validade, is_default FROM cartoes WHERE usuario_id = %s", (current_user_id,))
     cartoes = cursor.fetchall()
     cursor.close()
 
