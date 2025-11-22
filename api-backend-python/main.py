@@ -313,128 +313,7 @@ def excluir_cartao(cartao_id: int, current_user_id: int = Depends(get_current_us
     finally:
         cursor.close()
     return None
-
-@app.post("/pagamentos/", response_model=Pagamento, status_code=status.HTTP_201_CREATED)
-async def create_pagamento(
-    pagamento: PagamentoCreate,
-    db: mysql.connector.MySQLConnection = Depends(get_db),
-    current_user: UsuarioInDB = Depends(get_current_user_id)
-):
-    """
-    Registra um novo pagamento para o usuário autenticado.
-    """
-    cursor = None
-    try:
-        cursor = db.cursor()
-        
-        query = """
-        INSERT INTO pagamentos 
-        (horario_entrada, horario_saida, valor_pago, numero_cartao, usuario_id)
-        VALUES (%s, %s, %s, %s, %s)
-        """
-        
-        # Obtém o ID do usuário a partir do token de autenticação
-        usuario_id = current_user.id
-        
-        dados = (
-            pagamento.horario_entrada,
-            pagamento.horario_saida,
-            pagamento.valor_pago,
-            pagamento.numero_cartao,
-            usuario_id
-        )
-        
-        cursor.execute(query, dados)
-        db.commit()
-        
-        # Obtém o ID do pagamento que acabou de ser criado
-        new_pagamento_id = cursor.lastrowid
-        
-        # Retorna o objeto completo
-        return Pagamento(
-            id=new_pagamento_id,
-            **pagamento.dict(),
-            usuario_id=usuario_id
-        )
-
-    except mysql.connector.Error as err:
-        # Em caso de erro de integridade (ex: usuario_id não existe)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Erro ao registrar pagamento: {err}"
-        )
-    finally:
-        if cursor:
-            cursor.close()
-
-@app.get("/pagamentos/me/", response_model=List[Pagamento])
-async def read_meus_pagamentos(
-    db: mysql.connector.MySQLConnection = Depends(get_db),
-    current_user: UsuarioInDB = Depends(get_current_user_id)
-):
-    """
-    Obtém o histórico de pagamentos do usuário autenticado.
-    """
-    cursor = None
-    try:
-        # dictionary=True retorna os resultados como dicionários (útil para Pydantic)
-        cursor = db.cursor(dictionary=True)
-        
-        query = "SELECT * FROM pagamentos WHERE usuario_id = %s ORDER BY horario_saida DESC"
-        
-        cursor.execute(query, (current_user.id,))
-        
-        pagamentos = cursor.fetchall()
-        
-        return pagamentos
-
-    except mysql.connector.Error as err:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Erro ao buscar pagamentos: {err}"
-        )
-    finally:
-        if cursor:
-            cursor.close()
-
-@app.get("/pagamentos/{pagamento_id}", response_model=Pagamento)
-async def read_pagamento_por_id(
-    pagamento_id: int,
-    db: mysql.connector.MySQLConnection = Depends(get_db),
-    current_user: UsuarioInDB = Depends(get_current_user_id)
-):
-    """
-    Obtém um pagamento específico pelo ID,
-    verificando se ele pertence ao usuário autenticado.
-    """
-    cursor = None
-    try:
-        cursor = db.cursor(dictionary=True)
-        
-        # Query verifica o ID do pagamento E o ID do usuário (Segurança)
-        query = "SELECT * FROM pagamentos WHERE id = %s AND usuario_id = %s"
-        
-        cursor.execute(query, (pagamento_id, current_user.id))
-        
-        pagamento = cursor.fetchone()
-        
-        if not pagamento:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Pagamento não encontrado ou não pertence a este usuário."
-            )
-            
-        return pagamento
-
-    except mysql.connector.Error as err:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Erro ao buscar pagamento: {err}"
-        )
-    finally:
-        if cursor:
-            cursor.close()
-            
+          
 # --- ROTAS DE SESSÃO (CHECK-IN/CHECKOUT) ---
 
 @app.post("/sessoes/checkin", status_code=status.HTTP_201_CREATED, summary="Inicia uma nova sessão de estacionamento")
@@ -496,33 +375,93 @@ def prever_valor_saida(current_user_id: int = Depends(get_current_user_id), db: 
     
     return {"valor_previsto": valor_previsto}
 
-@app.post("/sessoes/checkout", summary="Finaliza a sessão ativa e calcula o valor")
-def registrar_saida(current_user_id: int = Depends(get_current_user_id), db: mysql.connector.MySQLConnection = Depends(get_db)):
+@app.post("/sessoes/checkout", summary="Finaliza a sessão e realiza o pagamento com cartão padrão")
+def registrar_saida(
+    current_user_id: int = Depends(get_current_user_id), 
+    db: mysql.connector.MySQLConnection = Depends(get_db)
+):
     cursor = db.cursor(dictionary=True)
-    cursor.execute("SELECT id, horario_entrada FROM sessoes WHERE usuario_id = %s AND status = 'ATIVA'", (current_user_id,))
-    sessao_ativa = cursor.fetchone()
     
-    if not sessao_ativa:
-        cursor.close()
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Nenhuma sessão ativa encontrada.")
-
-    sessao_id = sessao_ativa['id']
-    horario_entrada = sessao_ativa['horario_entrada']
-    horario_saida = datetime.now()
-    duracao = horario_saida - horario_entrada
-    horas_totais = max(1, (duracao.total_seconds() + 3599) // 3600)
-    valor_final = float(horas_totais * 5.0)
-
     try:
-        cursor.execute("UPDATE sessoes SET horario_saida = %s, valor_pago = %s, status = 'FINALIZADA' WHERE id = %s", (horario_saida, valor_final, sessao_id))
+        # ---------------------------------------------------------
+        # 1. VERIFICAÇÃO DE SESSÃO
+        # ---------------------------------------------------------
+        cursor.execute("SELECT id, horario_entrada FROM sessoes WHERE usuario_id = %s AND status = 'ATIVA'", (current_user_id,))
+        sessao_ativa = cursor.fetchone()
+        
+        if not sessao_ativa:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Nenhuma sessão ativa encontrada.")
+
+        # ---------------------------------------------------------
+        # 2. BUSCA DO CARTÃO PADRÃO 
+        # ---------------------------------------------------------
+        # Buscamos o cartão que está marcado com is_default = TRUE (ou 1)
+        query_cartao = """
+            SELECT id, ultimos_digitos 
+            FROM cartoes 
+            WHERE usuario_id = %s AND is_default = TRUE 
+            LIMIT 1
+        """
+        cursor.execute(query_cartao, (current_user_id,))
+        cartao_padrao = cursor.fetchone()
+
+        # Se não houver cartão padrão, bloqueamos a saída e avisamos o usuário
+        if not cartao_padrao:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, 
+                detail="Você precisa selecionar um cartão principal na aba 'Meus Cartões' para finalizar."
+            )
+
+        # ---------------------------------------------------------
+        # 3. CÁLCULO DE VALORES
+        # ---------------------------------------------------------
+        sessao_id = sessao_ativa['id']
+        horario_entrada = sessao_ativa['horario_entrada']
+        horario_saida = datetime.now()
+        
+        duracao = horario_saida - horario_entrada
+        horas_totais = max(1, (duracao.total_seconds() + 3599) // 3600)
+        valor_final = float(horas_totais * 5.0)
+
+        # ---------------------------------------------------------
+        # 4. REGISTRO NA TABELA PAGAMENTOS
+        # ---------------------------------------------------------
+        query_pagamento = """
+            INSERT INTO pagamentos (sessao_id, data_processamento, valor_pago, numero_final_cartao)
+            VALUES (%s, %s, %s, %s)
+        """
+        cursor.execute(query_pagamento, (
+            sessao_id,
+            horario_saida,
+            valor_final,
+            cartao_padrao['ultimos_digitos'] 
+        ))
+
+        # ---------------------------------------------------------
+        # 5. ATUALIZAÇÃO DA SESSÃO
+        # ---------------------------------------------------------
+        cursor.execute(
+            "UPDATE sessoes SET horario_saida = %s, valor_pago = %s, status = 'FINALIZADA' WHERE id = %s", 
+            (horario_saida, valor_final, sessao_id)
+        )
+
+        # 6. EFETIVAÇÃO (COMMIT)
         db.commit()
+
+        return {
+            "status": "sucesso", 
+            "mensagem": "Sessão encerrada e pagamento realizado com sucesso!", 
+            "valor_pago": valor_final,
+            "cartao_usado": f"Final {cartao_padrao['ultimos_digitos']}"
+        }
+
     except mysql.connector.Error as err:
-        db.rollback()
-        raise HTTPException(status_code=500, detail="Erro interno ao finalizar a sessão.")
+        db.rollback() # Desfaz tudo se der erro
+        print(f"Erro no checkout: {err}") # Log no console do servidor
+        raise HTTPException(status_code=500, detail="Erro interno ao processar pagamento e finalizar sessão.")
+    
     finally:
         cursor.close()
-
-    return {"status": "sucesso", "mensagem": "Sessão finalizada!", "valor_pago": valor_final}
 
 # ========================================================
 # ROTA SIMULADA - HORÁRIOS DE PICO (GOOGLE API)
