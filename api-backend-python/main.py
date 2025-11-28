@@ -84,8 +84,6 @@ class Pagamento(PagamentoBase):
 
 # --- 3. GERENCIAMENTO DE CONEXÃO COM O BANCO ---
 
-# <<< ALTERADO: Esta função agora lê a PORTA do banco
-# a partir das variáveis de ambiente.
 def get_db():
     db = None
     
@@ -97,7 +95,7 @@ def get_db():
     DB_PORT = os.environ.get("DB_PORT") 
 
     # Garante que todas as variáveis foram configuradas no Render
-    if not all([DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, DB_PORT]): # <<< ALTERADO
+    if not all([DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, DB_PORT]):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
             detail="Variáveis de ambiente do banco de dados não configuradas."
@@ -111,7 +109,7 @@ def get_db():
             database=DB_NAME,
             port=int(DB_PORT),
             ssl_ca="/etc/secrets/tidb_ca.pem",
-            ssl_verify_cert=True  # <<< ADICIONE ESTA LINHA
+            ssl_verify_cert=True  
         )
         yield db
     except mysql.connector.Error as err:
@@ -441,8 +439,8 @@ def registrar_saida(
         # 5. ATUALIZAÇÃO DA SESSÃO
         # ---------------------------------------------------------
         cursor.execute(
-            "UPDATE sessoes SET horario_saida = %s, valor_pago = %s, status = 'FINALIZADA' WHERE id = %s", 
-            (horario_saida, valor_final, sessao_id)
+            "UPDATE sessoes SET horario_saida = %s, status = 'FINALIZADA' WHERE id = %s", 
+            (horario_saida, sessao_id)
         )
 
         # 6. EFETIVAÇÃO (COMMIT)
